@@ -1,6 +1,6 @@
 # LSS (Log Script Scheduler)
 
-LSS 是一个基于 Node.js 开发的轻量级任务与队列调度系统。旨在以更改脚本配置文件的方式控制脚本运行并通过日志监测调控脚本
+LSS 是一个通过解析以json文件描述的任务流程(task/queue.json),并通过更改应用配置文件,监听应用日志实现自动化的命令行工具
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -29,7 +29,7 @@ src/
 
 2.运行任务
 
-程序运行需要项目根目录下存在 `config.json`。执行指令格式如下：
+执行指令格式如下：
 
 ```bash
 # 运行单个任务或队列
@@ -56,18 +56,8 @@ npm run watch-build
 
 3.环境说明
 
-* 配置加载: `BootstrapWrapper` 会根据当前运行环境（源码或 `pkg` 二进制）自动定位基础路径。可直接在bundle.js文件同目录放置task/queue.json并使用相对路径, 在本地调试时，请确保项目根目录下有 `config.json` 文件。
+* 配置加载: `BootstrapWrapper` 会根据当前运行环境（源码或 `pkg` 二进制）自动定位基础路径。可直接在bundle.js文件同目录放置task/queue.json并使用相对路径,
 * 临时文件: 运行时产生的备份文件（`.bak`）存放在 `./temp` 目录。该目录会被自动创建并已加入 `.gitignore`。
-
-4.日志处理器调试
-如果需要调试高频日志写入，可以修改 `poll` 方法的间隔时间（默认 75ms）：
-
-```typescript
-// src/Runner/RunnerLogHandler.ts
-this.timer = setInterval(async () => {
-    await this.poll(callback);
-}, 75); // 可根据需要调整
-```
 
 5.类型校验 (Zod)
 
@@ -131,6 +121,16 @@ Queue 配置文件示例 (`queue.json`)
       "timeout": 60
     }
   ]
+}
+```
+
+最小 Task 配置文件示例 (`minimal_task.json`)
+```json
+{
+  "type": "task",
+  "executableFilePath": "node script.js",
+  "isNeedParam": false,
+  "isNeedLog": false,
 }
 ```
 

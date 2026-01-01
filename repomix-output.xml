@@ -125,45 +125,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 </file>
 
-<file path="package.json">
-{
-  "name": "lss",
-  "version": "1.0.0",
-  "description": "旨在解析以json文件描述的任务流程,并通过更改应用配置文件实现自动化的命令行工具",
-  "license": "MIT",
-  "author": "",
-  "type": "commonjs",
-  "main": "src/Fronter/Fronter.ts",
-  "bin": "dist/bundle.js",
-  "scripts": {
-    "lint": "npx @biomejs/biome check --write ./src",
-    "check": "tsc --noEmit",
-    "bundle": "esbuild src/Fronter/Fronter.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.js",
-    "build": "npm run lint && npm run check && npm run bundle ",
-    "pkg": "npm run build && pkg . --out-path ./bin",
-    "watch-build": "nodemon --watch src --ext ts --exec \"npm run build\""
-  },
-  "pkg": {
-    "targets": [
-      "node18-win-x64"
-    ],
-    "outputPath": "bin"
-  },
-  "dependencies": {
-    "@types/lodash": "^4.17.21",
-    "@types/node": "^25.0.3",
-    "lodash": "^4.17.21",
-    "node-watch": "^0.7.4",
-    "zod": "^4.2.1"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.3.10",
-    "esbuild": "^0.27.2",
-    "nodemon": "^3.1.11"
-  }
-}
-</file>
-
 <file path="README.md">
 # LSS (Log Script Scheduler)
 
@@ -362,8 +323,9 @@ class BootstrapWrapper {
         // 3. 配置加载
         const configPath = path.join(this.env.selfPath, "config.json");
         if (!fs.existsSync(configPath)) {
-            console.error("Couldn't find config.json");
-            process.exit(1);
+            console.error("Couldn't find config.json, use default config");
+            //todo 应当用更优雅的方式解决config不存在时的问题
+            return;
         }
 
         try {
@@ -445,293 +407,6 @@ class Fronter {
 }
 
 new Fronter().main();
-</file>
-
-<file path="src/Runner/Runner.ts">
-import { type ChildProcess, spawn } from "node:child_process";
-import type { task } from "../type/task.type";
-import _LogHandler from "./RunnerLogHandler";
-
-class Runner {
-    private LogHandler: _LogHandler | undefined;
-    private child: ChildProcess | null = null;
-    private timeoutTimer: NodeJS.Timeout | null = null;
-
-    constructor(private t: task) {
-        if (t.config.isNeedLog && t.config.taskLogConfig) {
-            this.LogHandler = new _LogHandler(t.config.taskLogConfig);
-        }
-
-        // 关键：监听主进程信号，防止主程序退出后子进程变成“孤儿”
-        this.setupSignalHandlers();
-    }
-
-    private setupSignalHandlers() {
-        const killChild = () => {
-            if (this.child && !this.child.killed) {
-                console.log(
-                    `[Runner] 正在清理子进程 (PID: ${this.child.pid})...`,
-                );
-                this.child.kill("SIGTERM"); // 优雅退出
-            }
-        };
-
-        // 监听常见的退出信号
-        process.on("SIGINT", killChild); // Ctrl+C
-        process.on("SIGTERM", killChild); // 终止信号
-        process.on("exit", killChild); // 主进程正常或异常结束
-    }
-
-    async run(): Promise<number | null> {
-        if (this.LogHandler) {
-            this.LogHandler.start(this.LogHandler.defaultHandler);
-        }
-
-        return new Promise((resolve) => {
-            // 启动子进程
-            this.child = spawn(this.t.config.executableFilePath, {
-                shell: true,
-                detached: false, // 确保子进程不脱离会话
-                stdio: "inherit",
-            });
-
-            const pid = this.child.pid;
-            console.log(
-                `[Runner] 任务启动 [PID: ${pid}] [路径: ${this.t.config.executableFilePath}]`,
-            );
-
-            // 超时控制逻辑
-            if (this.t.config.timeout && this.t.config.timeout > 0) {
-                this.timeoutTimer = setTimeout(() => {
-                    if (this.child && !this.child.killed) {
-                        console.error(
-                            `[Runner] 任务运行超时 (${this.t.config.timeout}s)，强制终止 PID: ${pid}`,
-                        );
-                        this.child.kill("SIGKILL"); // 超时强制杀掉
-                    }
-                }, this.t.config.timeout * 1000);
-            }
-
-            this.child.on("close", (code) => {
-                this.cleanup();
-                console.log(`[Runner] 进程退出，退出码: ${code}`);
-                resolve(code);
-            });
-
-            this.child.on("error", (err) => {
-                this.cleanup();
-                console.error(`[Runner] 进程错误: ${err.message}`);
-                resolve(null);
-            });
-        });
-    }
-
-    /**
-     * 清理资源：停止日志监听、清除超时计时器
-     */
-    private cleanup() {
-        if (this.LogHandler) this.LogHandler.stop();
-        if (this.timeoutTimer) {
-            clearTimeout(this.timeoutTimer);
-            this.timeoutTimer = null;
-        }
-    }
-}
-
-export default Runner;
-</file>
-
-<file path="src/Runner/RunnerLogHandler.ts">
-import * as fs from "node:fs";
-import path from "node:path";
-import watch, { type Watcher } from "node-watch";
-import type { ITaskLogConfig } from "../type/task.type";
-
-/**
- * 任务日志处理器，负责定位日志文件并实时追踪新增内容。
- */
-class TaskLogHandler {
-    private logFilePath: string;
-    private lastSize = 0;
-    /** 存储上次轮询读取到的、不完整的行末尾数据 */
-    private tailBuffer: Buffer = Buffer.alloc(0);
-    /** 防止异步重入锁 */
-    private isProcessing = false;
-    //watcher实例
-    private watcher?: Watcher
-
-    constructor(config: ITaskLogConfig) {
-        let foundPath: string | null = null;
-
-        switch (config.logFileSearchMethod) {
-            case "field":
-                foundPath = this.findFile(
-                    config.logFileFolderPath,
-                    "field",
-                    config.logFilenameField,
-                );
-                break;
-            case "filename":
-                foundPath = this.findFile(
-                    config.logFileFolderPath,
-                    "filename",
-                    config.logFileName,
-                );
-                break;
-            case "latest":
-                foundPath = this.findFile(config.logFileFolderPath, "latest");
-                break;
-        }
-
-        if (foundPath !== null) {
-            this.logFilePath = foundPath;
-        } else {
-            console.error(
-                `无法通过方法 "${config.logFileSearchMethod}" 找到文件。`,
-            );
-            process.exit(1);
-        }
-    }
-
-    /**
-     * 启动日志监听流程。
-     */
-    public async start(callback: (line: string) => void): Promise<void> {
-        try {
-            // 初始化偏移量，跳过历史数据
-            this.lastSize = fs.statSync(this.logFilePath).size;
-        } catch {
-            this.lastSize = 0;
-        }
-
-        //启动监听
-        this.watcher = watch(this.logFilePath, (evt, _name) => {
-            if (evt === "update") {
-                this.poll(callback);
-            }
-        });
-    }
-
-    /**
-     * 轮询核心逻辑
-     */
-    private async poll(callback: (line: string) => void) {
-        if (this.isProcessing) return;
-        this.isProcessing = true;
-
-        try {
-            if (!fs.existsSync(this.logFilePath)) return;
-
-            const { size: currentSize } = fs.statSync(this.logFilePath);
-
-            // 处理日志翻转（如文件被清空或重建）
-            if (currentSize < this.lastSize) {
-                this.lastSize = 0;
-                this.tailBuffer = Buffer.alloc(0);
-            }
-
-            if (currentSize > this.lastSize) {
-                const readLen = currentSize - this.lastSize;
-                const buffer = Buffer.alloc(readLen);
-
-                // 读取增量内容
-                const fd = fs.openSync(this.logFilePath, "r");
-                try {
-                    fs.readSync(fd, buffer, 0, readLen, this.lastSize);
-
-                    // 将上次遗留的“半行”与本次读取内容合并
-                    const combinedBuffer = Buffer.concat([
-                        this.tailBuffer,
-                        buffer,
-                    ]);
-                    let offset = 0;
-
-                    // 查找换行符 (0x0A 为 \n)
-                    while (true) {
-                        const nlIndex = combinedBuffer.indexOf(0x0a, offset);
-
-                        if (nlIndex === -1) {
-                            // 没找到换行符，剩下的部分存入 tailBuffer 等待下次轮询
-                            this.tailBuffer = combinedBuffer.slice(offset);
-                            break;
-                        }
-
-                        // 提取完整行，并处理 \r\n (Windows 兼容)
-                        const line = combinedBuffer
-                            .toString("utf8", offset, nlIndex)
-                            .replace(/\r$/, "");
-
-                        if (line.trim()) {
-                            callback(line);
-                        }
-
-                        offset = nlIndex + 1;
-                    }
-
-                    this.lastSize = currentSize;
-                } finally {
-                    fs.closeSync(fd);
-                }
-            }
-        } catch (err) {
-            console.error("Read log error:", err);
-        } finally {
-            this.isProcessing = false;
-        }
-    }
-
-    public stop(): void {
-        this.watcher?.close()
-    }
-
-    public defaultHandler(line: string) {
-        //console.log(line);
-    }
-
-    /**
-     * 内部文件搜索算法（保持不变）
-     */
-    private findFile(
-        dir: string,
-        mode: "filename" | "latest" | "field",
-        query?: string,
-    ): string | null {
-        try {
-            const files = fs.readdirSync(dir);
-            if (!files.length) return null;
-
-            let targetFile: string | undefined;
-            switch (mode) {
-                case "filename":
-                    targetFile = files.find((f) => f === query);
-                    break;
-                case "field":
-                    targetFile = files.find((f) => {
-                        const nameWithoutExt = path.parse(f).name;
-                        return query ? nameWithoutExt.includes(query) : false;
-                    });
-                    break;
-                case "latest":
-                    targetFile = files
-                        .map((f) => ({
-                            name: f,
-                            time:
-                                fs.statSync(path.join(dir, f), {
-                                    throwIfNoEntry: false,
-                                })?.mtimeMs || 0,
-                        }))
-                        .sort((a, b) => b.time - a.time)[0]?.name;
-                    break;
-            }
-            return targetFile ? path.join(dir, targetFile) : null;
-        } catch (error) {
-            console.error("文件搜索失败:", error);
-            return null;
-        }
-    }
-}
-
-export default TaskLogHandler;
 </file>
 
 <file path="src/RunnerWrapper/RunnerWrapper.ts">
@@ -900,6 +575,175 @@ export class queue {
 }
 </file>
 
+<file path="tsconfig.json">
+{
+    "compilerOptions": {
+        /* 1. 适配 pkg 的关键配置 */
+        "target": "es2019", // pkg 对太新的语法支持有限，建议设为 ES2020 或更低
+        "module": "CommonJS", // pkg 对 CJS 支持最稳，如果是 ESM 需要额外配置
+        "outDir": "./dist", // 必须指定输出目录，方便 pkg 读取
+        "rootDir": "./src", // 锁定源码根目录
+        "lib": [
+            "ES2019"
+        ],
+        "esModuleInterop": true, // 方便导入 CommonJS 编写的旧包
+        "resolveJsonModule": true, // 允许导入 json，pkg 经常需要读取 package.json
+        /* 3. 严格性与质量 */
+        "strict": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "sourceMap": false, // 打包成二进制时，sourceMap 通常没用且增加体积
+        "removeComments": true // 减小体积
+    },
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "bin"
+    ]
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "lss",
+  "version": "1.0.0",
+  "description": "旨在解析以json文件描述的任务流程,并通过更改应用配置文件实现自动化的命令行工具",
+  "license": "MIT",
+  "author": "",
+  "type": "commonjs",
+  "main": "src/Fronter/Fronter.ts",
+  "bin": "dist/bundle.js",
+  "scripts": {
+    "lint": "npx @biomejs/biome check --write ./src",
+    "check": "tsc --noEmit",
+    "bundle": "esbuild src/Fronter/Fronter.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.js",
+    "build": "npm run lint && npm run check && npm run bundle ",
+    "pkg": "npm run build && pkg . --out-path ./bin",
+    "watch-build": "nodemon --watch src --ext ts --exec \"npm run build\""
+  },
+  "pkg": {
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "bin"
+  },
+  "dependencies": {
+    "@types/lodash": "^4.17.21",
+    "@types/node": "^25.0.3",
+    "lodash": "^4.17.21",
+    "node-watch": "^0.7.4",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.10",
+    "esbuild": "^0.27.2",
+    "nodemon": "^3.1.11"
+  }
+}
+</file>
+
+<file path="src/Runner/Runner.ts">
+import { type ChildProcess, spawn } from "node:child_process";
+import type { task } from "../type/task.type";
+import type _LogHandler from "./RunnerLogHandler";
+
+class Runner {
+    private LogHandler: _LogHandler | undefined;
+    private child: ChildProcess | null = null;
+    private timeoutTimer: NodeJS.Timeout | null = null;
+
+    constructor(private t: task) {
+        // 关键：监听主进程信号，防止主程序退出后子进程变成“孤儿”
+        this.setupSignalHandlers();
+    }
+
+    private setupSignalHandlers() {
+        const killChild = () => {
+            if (this.child && !this.child.killed) {
+                console.log(
+                    `[Runner] 正在清理子进程 (PID: ${this.child.pid})...`,
+                );
+                this.child.kill("SIGTERM"); // 优雅退出
+            }
+        };
+
+        // 监听常见的退出信号
+        process.on("SIGINT", killChild); // Ctrl+C
+        process.on("SIGTERM", killChild); // 终止信号
+        process.on("exit", killChild); // 主进程正常或异常结束
+    }
+
+    async run(): Promise<number | null> {
+        const useStdout = this.t.config.taskLogConfig?.logSource === "stdout";
+
+        return new Promise((resolve) => {
+            // 启动子进程
+            this.child = spawn(this.t.config.executableFilePath, {
+                shell: true,
+                detached: false, // 确保子进程不脱离会话
+                stdio: useStdout ? ["inherit", "pipe", "pipe"] : "inherit",
+            });
+
+            //启动日志
+            if (this.LogHandler) {
+                this.LogHandler.start(this.LogHandler.defaultHandler);
+                if (useStdout && this.child.stdout) {
+                    this.LogHandler.start(
+                        this.LogHandler.defaultHandler,
+                        this.child.stdout,
+                    );
+                }
+            }
+
+            const pid = this.child.pid;
+            console.log(
+                `[Runner] 任务启动 [PID: ${pid}] [路径: ${this.t.config.executableFilePath}]`,
+            );
+
+            // 超时控制逻辑
+            if (this.t.config.timeout && this.t.config.timeout > 0) {
+                this.timeoutTimer = setTimeout(() => {
+                    if (this.child && !this.child.killed) {
+                        console.error(
+                            `[Runner] 任务运行超时 (${this.t.config.timeout}s)，强制终止 PID: ${pid}`,
+                        );
+                        this.child.kill("SIGKILL"); // 超时强制杀掉
+                    }
+                }, this.t.config.timeout * 1000);
+            }
+
+            this.child.on("close", (code) => {
+                this.cleanup();
+                console.log(`[Runner] 进程退出，退出码: ${code}`);
+                resolve(code);
+            });
+
+            this.child.on("error", (err) => {
+                this.cleanup();
+                console.error(`[Runner] 进程错误: ${err.message}`);
+                resolve(null);
+            });
+        });
+    }
+
+    /**
+     * 清理资源：停止日志监听、清除超时计时器
+     */
+    private cleanup() {
+        if (this.LogHandler) this.LogHandler.stop();
+        if (this.timeoutTimer) {
+            clearTimeout(this.timeoutTimer);
+            this.timeoutTimer = null;
+        }
+    }
+}
+
+export default Runner;
+</file>
+
 <file path="src/type/task.type.ts">
 import { z } from "zod";
 
@@ -911,6 +755,7 @@ export const TaskParamConfigSchema = z.object({
 });
 
 export const TaskLogConfigSchema = z.object({
+    logSource: z.enum(["file", "stdout"]).optional().default("file"),
     logFileSearchMethod: z.enum(["filename", "latest", "field"]),
     logFileFolderPath: z.string(),
     logFileName: z.string().optional(),
@@ -952,35 +797,218 @@ export class task {
 }
 </file>
 
-<file path="tsconfig.json">
-{
-    "compilerOptions": {
-        /* 1. 适配 pkg 的关键配置 */
-        "target": "es2019", // pkg 对太新的语法支持有限，建议设为 ES2020 或更低
-        "module": "CommonJS", // pkg 对 CJS 支持最稳，如果是 ESM 需要额外配置
-        "outDir": "./dist", // 必须指定输出目录，方便 pkg 读取
-        "rootDir": "./src", // 锁定源码根目录
-        "lib": [
-            "ES2019"
-        ],
-        "esModuleInterop": true, // 方便导入 CommonJS 编写的旧包
-        "resolveJsonModule": true, // 允许导入 json，pkg 经常需要读取 package.json
-        /* 3. 严格性与质量 */
-        "strict": true,
-        "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "sourceMap": false, // 打包成二进制时，sourceMap 通常没用且增加体积
-        "removeComments": true // 减小体积
-    },
-    "include": [
-        "src/**/*"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        "bin"
-    ]
+<file path="src/Runner/RunnerLogHandler.ts">
+import * as fs from "node:fs";
+import path from "node:path";
+import type { Readable } from "node:stream";
+import watch, { type Watcher } from "node-watch";
+import type { ITaskLogConfig } from "../type/task.type";
+
+/**
+ * 任务日志处理器，负责定位日志文件并实时追踪新增内容。
+ */
+class TaskLogHandler {
+    private logSource: "file" | "stdout";
+    private logFilePath: string;
+    private lastSize = 0;
+    /** 存储上次轮询读取到的、不完整的行末尾数据 */
+    private tailBuffer: Buffer = Buffer.alloc(0);
+    /** 防止异步重入锁 */
+    private isProcessing = false;
+    //watcher实例
+    private watcher?: Watcher;
+
+    constructor(config: ITaskLogConfig) {
+        this.logSource = config.logSource;
+        let foundPath: string | null = null;
+
+        switch (config.logFileSearchMethod) {
+            case "field":
+                foundPath = this.findFile(
+                    config.logFileFolderPath,
+                    "field",
+                    config.logFilenameField,
+                );
+                break;
+            case "filename":
+                foundPath = this.findFile(
+                    config.logFileFolderPath,
+                    "filename",
+                    config.logFileName,
+                );
+                break;
+            case "latest":
+                foundPath = this.findFile(config.logFileFolderPath, "latest");
+                break;
+        }
+
+        if (foundPath !== null) {
+            this.logFilePath = foundPath;
+        } else {
+            console.error(
+                `无法通过方法 "${config.logFileSearchMethod}" 找到文件。`,
+            );
+            process.exit(1);
+        }
+    }
+
+    /**
+     * 启动日志监听流程。
+     */
+    public async start(
+        callback: (line: string) => void,
+        stream?: Readable,
+    ): Promise<void> {
+        try {
+            // 初始化偏移量，跳过历史数据
+            this.lastSize = fs.statSync(this.logFilePath).size;
+        } catch {
+            this.lastSize = 0;
+        }
+
+        if (this.logSource === "file") {
+            //启动监听
+            this.watcher = watch(this.logFilePath, (evt, _name) => {
+                if (evt === "update") {
+                    this.pollFile(callback);
+                }
+            });
+        }
+
+        if (this.logSource === "stdout" && stream) {
+            stream.on("data", (chunk: Buffer) => {
+                this.processNewBuffer(callback, chunk);
+            });
+            stream.on("data", (chunk: Buffer) => {
+                const errorLine = chunk.toString().trim();
+                if (errorLine) console.error(`[Stderr] ${errorLine}`);
+            });
+        }
+    }
+
+    /**
+     * 轮询核心逻辑
+     */
+    private async pollFile(callback: (line: string) => void) {
+        if (this.isProcessing) return;
+        this.isProcessing = true;
+
+        try {
+            if (!fs.existsSync(this.logFilePath)) return;
+
+            const { size: currentSize } = fs.statSync(this.logFilePath);
+
+            // 处理日志翻转（如文件被清空或重建）
+            if (currentSize < this.lastSize) {
+                this.lastSize = 0;
+                this.tailBuffer = Buffer.alloc(0);
+            }
+
+            if (currentSize > this.lastSize) {
+                const readLen = currentSize - this.lastSize;
+                const buffer = Buffer.alloc(readLen);
+
+                // 读取增量内容
+                const fd = fs.openSync(this.logFilePath, "r");
+                try {
+                    fs.readSync(fd, buffer, 0, readLen, this.lastSize);
+                    this.processNewBuffer(callback, buffer);
+                } finally {
+                    fs.closeSync(fd);
+                }
+            }
+        } catch (err) {
+            console.error("Read log error:", err);
+        } finally {
+            this.isProcessing = false;
+        }
+    }
+
+    public stop(): void {
+        this.watcher?.close();
+    }
+
+    public defaultHandler(line: string) {
+        //console.log(line);
+    }
+
+    /**
+     * 内部文件搜索算法（保持不变）
+     */
+    private findFile(
+        dir: string,
+        mode: "filename" | "latest" | "field",
+        query?: string,
+    ): string | null {
+        try {
+            const files = fs.readdirSync(dir);
+            if (!files.length) return null;
+
+            let targetFile: string | undefined;
+            switch (mode) {
+                case "filename":
+                    targetFile = files.find((f) => f === query);
+                    break;
+                case "field":
+                    targetFile = files.find((f) => {
+                        const nameWithoutExt = path.parse(f).name;
+                        return query ? nameWithoutExt.includes(query) : false;
+                    });
+                    break;
+                case "latest":
+                    targetFile = files
+                        .map((f) => ({
+                            name: f,
+                            time:
+                                fs.statSync(path.join(dir, f), {
+                                    throwIfNoEntry: false,
+                                })?.mtimeMs || 0,
+                        }))
+                        .sort((a, b) => b.time - a.time)[0]?.name;
+                    break;
+            }
+            return targetFile ? path.join(dir, targetFile) : null;
+        } catch (error) {
+            console.error("文件搜索失败:", error);
+            return null;
+        }
+    }
+
+    /**
+     * 处理新增buffer内容
+     */
+    private processNewBuffer(callback: (ling: string) => void, buffer: Buffer) {
+        // 将上次遗留的“半行”与本次读取内容合并
+        const combinedBuffer = Buffer.concat([this.tailBuffer, buffer]);
+        let offset = 0;
+
+        // 查找换行符 (0x0A 为 \n)
+        while (true) {
+            const nlIndex = combinedBuffer.indexOf(0x0a, offset);
+
+            if (nlIndex === -1) {
+                // 没找到换行符，剩下的部分存入 tailBuffer 等待下次轮询
+                this.tailBuffer = combinedBuffer.slice(offset);
+                break;
+            }
+
+            // 提取完整行，并处理 \r\n (Windows 兼容)
+            const line = combinedBuffer
+                .toString("utf8", offset, nlIndex)
+                .replace(/\r$/, "");
+
+            if (line.trim()) {
+                callback(line);
+            }
+
+            offset = nlIndex + 1;
+        }
+        const { size: currentSize } = fs.statSync(this.logFilePath);
+        this.lastSize = currentSize;
+    }
 }
+
+export default TaskLogHandler;
 </file>
 
 </files>

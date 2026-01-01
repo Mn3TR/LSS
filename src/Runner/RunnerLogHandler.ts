@@ -9,7 +9,7 @@ import type { ITaskLogConfig } from "../type/task.type";
  */
 class TaskLogHandler {
     private logSource: "file" | "stdout";
-    private logFilePath: string;
+    private logFilePath: string | undefined;
     private lastSize = 0;
     /** 存储上次轮询读取到的、不完整的行末尾数据 */
     private tailBuffer: Buffer = Buffer.alloc(0);
@@ -20,35 +20,40 @@ class TaskLogHandler {
 
     constructor(config: ITaskLogConfig) {
         this.logSource = config.logSource;
-        let foundPath: string | null = null;
+        if (this.logSource === "file") {
+            let foundPath: string | null = null;
 
-        switch (config.logFileSearchMethod) {
-            case "field":
-                foundPath = this.findFile(
-                    config.logFileFolderPath,
-                    "field",
-                    config.logFilenameField,
-                );
-                break;
-            case "filename":
-                foundPath = this.findFile(
-                    config.logFileFolderPath,
-                    "filename",
-                    config.logFileName,
-                );
-                break;
-            case "latest":
-                foundPath = this.findFile(config.logFileFolderPath, "latest");
-                break;
-        }
+            switch (config.logFileSearchMethod) {
+                case "field":
+                    foundPath = this.findFile(
+                        config.logFileFolderPath,
+                        "field",
+                        config.logFilenameField,
+                    );
+                    break;
+                case "filename":
+                    foundPath = this.findFile(
+                        config.logFileFolderPath,
+                        "filename",
+                        config.logFileName,
+                    );
+                    break;
+                case "latest":
+                    foundPath = this.findFile(
+                        config.logFileFolderPath,
+                        "latest",
+                    );
+                    break;
+            }
 
-        if (foundPath !== null) {
-            this.logFilePath = foundPath;
-        } else {
-            console.error(
-                `无法通过方法 "${config.logFileSearchMethod}" 找到文件。`,
-            );
-            process.exit(1);
+            if (foundPath !== null) {
+                this.logFilePath = foundPath;
+            } else {
+                console.error(
+                    `无法通过方法 "${config.logFileSearchMethod}" 找到文件。`,
+                );
+                process.exit(1);
+            }
         }
     }
 
@@ -59,14 +64,13 @@ class TaskLogHandler {
         callback: (line: string) => void,
         stream?: Readable,
     ): Promise<void> {
-        try {
-            // 初始化偏移量，跳过历史数据
-            this.lastSize = fs.statSync(this.logFilePath).size;
-        } catch {
-            this.lastSize = 0;
-        }
-
-        if (this.logSource === "file") {
+        if (this.logSource === "file" && this.logFilePath) {
+            try {
+                // 初始化偏移量，跳过历史数据
+                this.lastSize = fs.statSync(this.logFilePath).size;
+            } catch {
+                this.lastSize = 0;
+            }
             //启动监听
             this.watcher = watch(this.logFilePath, (evt, _name) => {
                 if (evt === "update") {
@@ -87,40 +91,42 @@ class TaskLogHandler {
     }
 
     /**
-     * 轮询核心逻辑
+     * 文件改动
      */
     private async pollFile(callback: (line: string) => void) {
         if (this.isProcessing) return;
         this.isProcessing = true;
 
-        try {
-            if (!fs.existsSync(this.logFilePath)) return;
+        if (this.logFilePath) {
+            try {
+                if (!fs.existsSync(this.logFilePath)) return;
 
-            const { size: currentSize } = fs.statSync(this.logFilePath);
+                const { size: currentSize } = fs.statSync(this.logFilePath);
 
-            // 处理日志翻转（如文件被清空或重建）
-            if (currentSize < this.lastSize) {
-                this.lastSize = 0;
-                this.tailBuffer = Buffer.alloc(0);
-            }
-
-            if (currentSize > this.lastSize) {
-                const readLen = currentSize - this.lastSize;
-                const buffer = Buffer.alloc(readLen);
-
-                // 读取增量内容
-                const fd = fs.openSync(this.logFilePath, "r");
-                try {
-                    fs.readSync(fd, buffer, 0, readLen, this.lastSize);
-                    this.processNewBuffer(callback, buffer);
-                } finally {
-                    fs.closeSync(fd);
+                // 处理日志翻转（如文件被清空或重建）
+                if (currentSize < this.lastSize) {
+                    this.lastSize = 0;
+                    this.tailBuffer = Buffer.alloc(0);
                 }
+
+                if (currentSize > this.lastSize) {
+                    const readLen = currentSize - this.lastSize;
+                    const buffer = Buffer.alloc(readLen);
+
+                    // 读取增量内容
+                    const fd = fs.openSync(this.logFilePath, "r");
+                    try {
+                        fs.readSync(fd, buffer, 0, readLen, this.lastSize);
+                        this.processNewBuffer(callback, buffer);
+                    } finally {
+                        fs.closeSync(fd);
+                    }
+                }
+            } catch (err) {
+                console.error("Read log error:", err);
+            } finally {
+                this.isProcessing = false;
             }
-        } catch (err) {
-            console.error("Read log error:", err);
-        } finally {
-            this.isProcessing = false;
         }
     }
 
@@ -203,8 +209,10 @@ class TaskLogHandler {
 
             offset = nlIndex + 1;
         }
-        const { size: currentSize } = fs.statSync(this.logFilePath);
-        this.lastSize = currentSize;
+        if (this.logSource === "file" && this.logFilePath) {
+            const { size: currentSize } = fs.statSync(this.logFilePath);
+            this.lastSize = currentSize;
+        }
     }
 }
 

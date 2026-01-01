@@ -47,8 +47,9 @@ class BootstrapWrapper {
         // 3. 配置加载
         const configPath = path.join(this.env.selfPath, "config.json");
         if (!fs.existsSync(configPath)) {
-            console.error("Couldn't find config.json");
-            process.exit(1);
+            console.error("Couldn't find config.json, use default config");
+            //todo 应当用更优雅的方式解决config不存在时的问题
+            return;
         }
 
         try {

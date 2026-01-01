@@ -1,7 +1,7 @@
 {
   "name": "lss",
   "version": "1.0.0",
-  "description": "",
+  "description": "旨在解析以json文件描述的任务流程,并通过更改应用配置文件实现自动化的命令行工具",
   "license": "MIT",
   "author": "",
   "type": "commonjs",
@@ -25,6 +25,7 @@
     "@types/lodash": "^4.17.21",
     "@types/node": "^25.0.3",
     "lodash": "^4.17.21",
+    "node-watch": "^0.7.4",
     "zod": "^4.2.1"
   },
   "devDependencies": {

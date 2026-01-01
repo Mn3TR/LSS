@@ -1,19 +1,20 @@
 import * as fs from "node:fs";
 import path from "node:path";
+import watch, { type Watcher } from "node-watch";
 import type { ITaskLogConfig } from "../type/task.type";
 
 /**
- * 任务日志处理器，负责动态定位日志文件并实时追踪新增内容。
- * 集成了 Buffer 级偏移量控制，确保在高频写入下不丢失任何非完整行。
+ * 任务日志处理器，负责定位日志文件并实时追踪新增内容。
  */
 class TaskLogHandler {
     private logFilePath: string;
     private lastSize = 0;
-    private timer: NodeJS.Timeout | null = null;
-    /** 核心改进：存储上次轮询读取到的、不完整的行末尾数据 */
+    /** 存储上次轮询读取到的、不完整的行末尾数据 */
     private tailBuffer: Buffer = Buffer.alloc(0);
     /** 防止异步重入锁 */
     private isProcessing = false;
+    //watcher实例
+    private watcher?: Watcher;
 
     constructor(config: ITaskLogConfig) {
         let foundPath: string | null = null;
@@ -53,17 +54,18 @@ class TaskLogHandler {
      */
     public async start(callback: (line: string) => void): Promise<void> {
         try {
-            // 初始化偏移量，默认跳过历史数据
-            if (fs.existsSync(this.logFilePath)) {
-                this.lastSize = fs.statSync(this.logFilePath).size;
-            }
+            // 初始化偏移量，跳过历史数据
+            this.lastSize = fs.statSync(this.logFilePath).size;
         } catch {
             this.lastSize = 0;
         }
 
-        this.timer = setInterval(async () => {
-            await this.poll(callback);
-        }, 75);
+        //启动监听
+        this.watcher = watch(this.logFilePath, (evt, _name) => {
+            if (evt === "update") {
+                this.poll(callback);
+            }
+        });
     }
 
     /**
@@ -88,7 +90,7 @@ class TaskLogHandler {
                 const readLen = currentSize - this.lastSize;
                 const buffer = Buffer.alloc(readLen);
 
-                // 使用文件句柄精确读取增量内容
+                // 读取增量内容
                 const fd = fs.openSync(this.logFilePath, "r");
                 try {
                     fs.readSync(fd, buffer, 0, readLen, this.lastSize);
@@ -135,13 +137,11 @@ class TaskLogHandler {
     }
 
     public stop(): void {
-        if (this.timer) clearInterval(this.timer);
-        this.timer = null;
-        this.tailBuffer = Buffer.alloc(0);
+        this.watcher?.close();
     }
 
     public defaultHandler(line: string) {
-        console.log(line);
+        //console.log(line);
     }
 
     /**

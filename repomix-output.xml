@@ -44,6 +44,7 @@ The content is organized as follows:
 biome.json
 LICENSE
 package.json
+README.md
 src/BootstrapWrapper/BootstrapWrapper.ts
 src/Fronter/Fronter.ts
 src/Runner/Runner.ts
@@ -128,7 +129,7 @@ SOFTWARE.
 {
   "name": "lss",
   "version": "1.0.0",
-  "description": "",
+  "description": "旨在解析以json文件描述的任务流程,并通过更改应用配置文件实现自动化的命令行工具",
   "license": "MIT",
   "author": "",
   "type": "commonjs",
@@ -152,6 +153,7 @@ SOFTWARE.
     "@types/lodash": "^4.17.21",
     "@types/node": "^25.0.3",
     "lodash": "^4.17.21",
+    "node-watch": "^0.7.4",
     "zod": "^4.2.1"
   },
   "devDependencies": {
@@ -160,6 +162,154 @@ SOFTWARE.
     "nodemon": "^3.1.11"
   }
 }
+</file>
+
+<file path="README.md">
+# LSS (Log Script Scheduler)
+
+LSS 是一个基于 Node.js 开发的轻量级任务与队列调度系统。旨在以更改脚本配置文件的方式控制脚本运行并通过日志监测调控脚本
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## 核心特性
+
+- **双模式调度**：支持单个任务 (`task`) 执行或多个任务组成的队列 (`queue`) 顺序执行。
+- **动态参数注入**：在任务启动前自动将参数文件合并至目标配置文件，并在执行结束后自动从备份中恢复原始配置，确保配置文件的纯净性。
+- **实时日志监听**：内置日志处理器，支持通过文件名匹配、关键字搜索或获取最新文件来实时追踪子进程输出。
+- **安全保障机制**：提供任务超时强制终止逻辑，并能自动清理子进程以防止孤儿进程产生。
+
+## 目录结构
+
+```plaintext
+src/
+├── BootstrapWrapper/    # 环境检测、临时目录准备及全局配置加载
+├── Fronter/             # 命令行入口，负责解析参数与模式分发
+├── Runner/              # 核心执行器与日志轮询处理器
+├── RunnerWrapper/       # 业务逻辑封装，执行参数备份与状态恢复
+├── type/                # 基于 Zod 的强类型校验与定义
+└── tsconfig.json        # 针对 CJS 和 pkg 环境优化的编译配置
+```
+
+## 快速开始
+
+1.下载[releases](https://github.com/Mn3TR/LSS/releases)已打包好的二进制文件
+
+2.运行任务
+
+程序运行需要项目根目录下存在 `config.json`。执行指令格式如下：
+
+```bash
+# 运行单个任务或队列
+lss.exe run ./your_config.json
+```
+
+## 开发与调试
+
+如果你想对 LSS 进行二次开发或在本地调试代码，可以参考以下说明：
+
+1.安装依赖
+
+```bash
+npm install
+```
+
+2.启动监听模式
+
+项目配置了监听模式,可以在代码修改后自动编译
+
+```bash
+npm run watch-build
+```
+
+3.环境说明
+
+* 配置加载: `BootstrapWrapper` 会根据当前运行环境（源码或 `pkg` 二进制）自动定位基础路径。可直接在bundle.js文件同目录放置task/queue.json并使用相对路径, 在本地调试时，请确保项目根目录下有 `config.json` 文件。
+* 临时文件: 运行时产生的备份文件（`.bak`）存放在 `./temp` 目录。该目录会被自动创建并已加入 `.gitignore`。
+
+4.日志处理器调试
+如果需要调试高频日志写入，可以修改 `poll` 方法的间隔时间（默认 75ms）：
+
+```typescript
+// src/Runner/RunnerLogHandler.ts
+this.timer = setInterval(async () => {
+    await this.poll(callback);
+}, 75); // 可根据需要调整
+```
+
+5.类型校验 (Zod)
+
+所有输入配置均通过 `Zod` 进行严格校验。如果需要扩展配置项，请修改 `src/type/` 下的 Schema 定义，这能确保在任务运行前捕获格式错误。
+
+## 配置示例
+
+单个任务配置文件 (`task.json`)
+
+```json
+{
+  "type": "task",
+  "executableFilePath": "node script.js",
+  "isNeedParam": true,
+  "taskParamConfig": {
+    "configFilePath": "settings.json",
+    "paramFilePath": "input.json"
+  },
+  "isNeedLog": true,
+  "taskLogConfig": {
+    "logFileSearchMethod": "latest",
+    "logFileFolderPath": "./logs",
+    "successLog": "Process Completed",
+    "failedLog": "Fatal Error"
+  },
+  "timeout": 300
+}
+```
+
+Queue 配置文件示例 (`queue.json`)
+
+```json
+{
+  "type": "queue",
+  "tasks": [
+    {
+      "type": "task",
+      "executableFilePath": "python process_data.py",
+      "isNeedParam": true,
+      "taskParamConfig": {
+        "configFilePath": "config.json",
+        "paramFilePath": "input_params.json"
+      },
+      "isNeedLog": false,
+      "timeout": 30
+    },
+    {
+      "type": "task",
+      "executableFilePath": "node report_gen.js",
+      "isNeedParam": false,
+      "isNeedLog": true,
+      "taskLogConfig": {
+        "logFileSearchMethod": "latest",
+        "logFileFolderPath": "./logs",
+        "logTimeSectionStart": 0,
+        "logTimeSectionEnd": 10,
+        "logTimeFormat": "HH:mm:ss",
+        "successLog": "Success",
+        "failedLog": "Error"
+      },
+      "timeout": 60
+    }
+  ]
+}
+```
+
+## 技术栈
+
+* **Runtime**: Node.js (Target: Node18+)
+* **Language**: TypeScript
+* **Data Validation**: [Zod](https://zod.dev/)
+* **Utilities**: [Lodash](https://lodash.com/)
+* **Tooling**: [Biome](https://biomejs.dev/), [esbuild](https://esbuild.github.io/), [pkg](https://github.com/vercel/pkg)
+
+本项目采用 [MIT License](https://www.google.com/search?q=LICENSE)。
 </file>
 
 <file path="src/BootstrapWrapper/BootstrapWrapper.ts">
@@ -394,20 +544,21 @@ export default Runner;
 <file path="src/Runner/RunnerLogHandler.ts">
 import * as fs from "node:fs";
 import path from "node:path";
+import watch, { type Watcher } from "node-watch";
 import type { ITaskLogConfig } from "../type/task.type";
 
 /**
- * 任务日志处理器，负责动态定位日志文件并实时追踪新增内容。
- * 集成了 Buffer 级偏移量控制，确保在高频写入下不丢失任何非完整行。
+ * 任务日志处理器，负责定位日志文件并实时追踪新增内容。
  */
 class TaskLogHandler {
     private logFilePath: string;
     private lastSize = 0;
-    private timer: NodeJS.Timeout | null = null;
-    /** 核心改进：存储上次轮询读取到的、不完整的行末尾数据 */
+    /** 存储上次轮询读取到的、不完整的行末尾数据 */
     private tailBuffer: Buffer = Buffer.alloc(0);
     /** 防止异步重入锁 */
     private isProcessing = false;
+    //watcher实例
+    private watcher?: Watcher
 
     constructor(config: ITaskLogConfig) {
         let foundPath: string | null = null;
@@ -447,17 +598,18 @@ class TaskLogHandler {
      */
     public async start(callback: (line: string) => void): Promise<void> {
         try {
-            // 初始化偏移量，默认跳过历史数据
-            if (fs.existsSync(this.logFilePath)) {
-                this.lastSize = fs.statSync(this.logFilePath).size;
-            }
+            // 初始化偏移量，跳过历史数据
+            this.lastSize = fs.statSync(this.logFilePath).size;
         } catch {
             this.lastSize = 0;
         }
 
-        this.timer = setInterval(async () => {
-            await this.poll(callback);
-        }, 75);
+        //启动监听
+        this.watcher = watch(this.logFilePath, (evt, _name) => {
+            if (evt === "update") {
+                this.poll(callback);
+            }
+        });
     }
 
     /**
@@ -482,7 +634,7 @@ class TaskLogHandler {
                 const readLen = currentSize - this.lastSize;
                 const buffer = Buffer.alloc(readLen);
 
-                // 使用文件句柄精确读取增量内容
+                // 读取增量内容
                 const fd = fs.openSync(this.logFilePath, "r");
                 try {
                     fs.readSync(fd, buffer, 0, readLen, this.lastSize);
@@ -529,13 +681,11 @@ class TaskLogHandler {
     }
 
     public stop(): void {
-        if (this.timer) clearInterval(this.timer);
-        this.timer = null;
-        this.tailBuffer = Buffer.alloc(0);
+        this.watcher?.close()
     }
 
     public defaultHandler(line: string) {
-        console.log(line);
+        //console.log(line);
     }
 
     /**

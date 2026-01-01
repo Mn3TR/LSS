@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import type { task } from "../type/task.type";
-import _LogHandler from "./RunnerLogHandler";
+import type _LogHandler from "./RunnerLogHandler";
 
 class Runner {
     private LogHandler: _LogHandler | undefined;
@@ -8,10 +8,6 @@ class Runner {
     private timeoutTimer: NodeJS.Timeout | null = null;
 
     constructor(private t: task) {
-        if (t.config.isNeedLog && t.config.taskLogConfig) {
-            this.LogHandler = new _LogHandler(t.config.taskLogConfig);
-        }
-
         // 关键：监听主进程信号，防止主程序退出后子进程变成“孤儿”
         this.setupSignalHandlers();
     }
@@ -33,17 +29,26 @@ class Runner {
     }
 
     async run(): Promise<number | null> {
-        if (this.LogHandler) {
-            this.LogHandler.start(this.LogHandler.defaultHandler);
-        }
+        const useStdout = this.t.config.taskLogConfig?.logSource === "stdout";
 
         return new Promise((resolve) => {
             // 启动子进程
             this.child = spawn(this.t.config.executableFilePath, {
                 shell: true,
                 detached: false, // 确保子进程不脱离会话
-                stdio: "inherit",
+                stdio: useStdout ? ["inherit", "pipe", "pipe"] : "inherit",
             });
+
+            //启动日志
+            if (this.LogHandler) {
+                this.LogHandler.start(this.LogHandler.defaultHandler);
+                if (useStdout && this.child.stdout) {
+                    this.LogHandler.start(
+                        this.LogHandler.defaultHandler,
+                        this.child.stdout,
+                    );
+                }
+            }
 
             const pid = this.child.pid;
             console.log(

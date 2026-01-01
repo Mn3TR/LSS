@@ -8,6 +8,7 @@ export const TaskParamConfigSchema = z.object({
 });
 
 export const TaskLogConfigSchema = z.object({
+    logSource: z.enum(["file", "stdout"]).optional().default("file"),
     logFileSearchMethod: z.enum(["filename", "latest", "field"]),
     logFileFolderPath: z.string(),
     logFileName: z.string().optional(),

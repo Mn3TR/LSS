@@ -12,7 +12,7 @@
     "check": "tsc --noEmit",
     "bundle": "esbuild src/Fronter/Fronter.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.js",
     "build": "npm run lint && npm run check && npm run bundle ",
-    "pkg": "npm run build && pkg . --out-path ./bin",
+    "pkg": "npm run build && pkg .",
     "watch-build": "nodemon --watch src --ext ts --exec \"npm run build\""
   },
   "pkg": {

@@ -31,9 +31,9 @@ class RunnerWrapper {
         if (t.config.isNeedParam && t.config.taskParamConfig) {
             this.Logger.debug("created TaskParamHelper");
             const ParamHelper = new _ParamHelper(t.config.taskParamConfig);
-            this.Logger.debug("backup task configfile")
+            this.Logger.debug("backup task configfile");
             ParamHelper.backup();
-            this.Logger.debug("write task configfile")
+            this.Logger.debug("write task configfile");
             ParamHelper.write();
         }
         this.Logger.debug("created Runner");
@@ -48,7 +48,7 @@ class RunnerWrapper {
             this.Logger.debug("Runner completed");
             if (t.config.isNeedParam && t.config.taskParamConfig) {
                 const ParamHelper = new _ParamHelper(t.config.taskParamConfig);
-                this.Logger.debug("recovery task configfile")
+                this.Logger.debug("recovery task configfile");
                 ParamHelper.recovery();
             }
         }

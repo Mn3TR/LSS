@@ -38,6 +38,12 @@ class BootstrapWrapper {
      * 4. 配置加载：校验并读取config.json
      */
     constructor() {
+        //检查运行环境,并获取工作路径
+        const isPkg = typeof process.pkg !== "undefined";
+        this.env = {
+            isPkg,
+            selfPath: isPkg ? path.dirname(process.execPath) : process.cwd(),
+        };
         //初始化日志记录器
         this.BaseLogger = loggerInit(this.env.selfPath);
         this.Logger = this.BaseLogger.getSubLogger({
@@ -46,13 +52,7 @@ class BootstrapWrapper {
         this.Logger.debug("BootstrapWrapper init");
         this.Logger.debug("BaseLogger init");
 
-        //检查运行环境,并获取工作路径
-        const isPkg = typeof process.pkg !== "undefined";
-        this.env = {
-            isPkg,
-            selfPath: isPkg ? path.dirname(process.execPath) : process.cwd(),
-        };
-        this.Logger.debug("check environment, get cwd");
+        this.Logger.debug(`check environment, get cwd:${this.env.selfPath}`);
 
         //确保缓存目录存在
         if (!fs.existsSync("./temp")) {

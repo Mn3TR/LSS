@@ -67,7 +67,7 @@ class TaskParamHelper {
      * @returns {void}
      */
     write(): void {
-        let config, param;
+        let config: unknown, param: unknown;
         try {
             config = JSON.parse(fs.readFileSync(this.configFilePath, "utf8"));
         } catch (error) {
@@ -114,12 +114,16 @@ class TaskParamHelper {
                 fs.copyFileSync(this.backupFileName, this.configFilePath);
             }
         } catch (error) {
-            this.Logger.fatal(`couldn't recovery task configfile, please recovery manually`,);
-            this.Logger.fatal(`the backup is in ${this.backupFileName}, the origin configfile is in:${this.configFilePath}`)
+            this.Logger.fatal(
+                `couldn't recovery task configfile, please recovery manually`,
+            );
+            this.Logger.fatal(
+                `the backup is in ${this.backupFileName}, the origin configfile is in:${this.configFilePath}`,
+            );
             this.Logger.fatal(error);
         }
         fs.unlinkSync(this.backupFileName);
-        this.Logger.debug("task configfile revoeryd, deleted backup file")
+        this.Logger.debug("task configfile revoeryd, deleted backup file");
     }
 }
 export default TaskParamHelper;

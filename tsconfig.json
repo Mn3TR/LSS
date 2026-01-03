@@ -1,21 +1,20 @@
 {
     "compilerOptions": {
-        /* 1. 适配 pkg 的关键配置 */
-        "target": "es2019", // pkg 对太新的语法支持有限，建议设为 ES2020 或更低
-        "module": "CommonJS", // pkg 对 CJS 支持最稳，如果是 ESM 需要额外配置
-        "outDir": "./dist", // 必须指定输出目录，方便 pkg 读取
-        "rootDir": "./src", // 锁定源码根目录
+        "target": "es2020",
+        "module": "CommonJS",
+        "outDir": "./dist",
+        "rootDir": "./src",
         "lib": [
-            "ES2019"
+            "ES2020"
         ],
-        "esModuleInterop": true, // 方便导入 CommonJS 编写的旧包
-        "resolveJsonModule": true, // 允许导入 json，pkg 经常需要读取 package.json
-        /* 3. 严格性与质量 */
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
         "strict": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
-        "sourceMap": false, // 打包成二进制时，sourceMap 通常没用且增加体积
-        "removeComments": true // 减小体积
+        "sourceMap": false,
+        "removeComments": true,
+        "inlineSourceMap": true
     },
     "include": [
         "src/**/*"

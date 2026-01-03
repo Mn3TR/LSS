@@ -26,6 +26,8 @@
     "@types/node": "^25.0.3",
     "lodash": "^4.17.21",
     "node-watch": "^0.7.4",
+    "rotating-file-stream": "^3.2.7",
+    "tslog": "^4.10.2",
     "zod": "^4.2.1"
   },
   "devDependencies": {

@@ -22,6 +22,7 @@ export const TaskLogConfigSchema = z.object({
 
 export const TaskSchema = z.object({
     type: z.literal("task"),
+    name: z.string(),
     executableFilePath: z.string(),
     isNeedParam: z.boolean(),
     taskParamConfig: TaskParamConfigSchema.optional(),

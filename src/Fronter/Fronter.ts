@@ -16,7 +16,7 @@ class Fronter {
     static LSSHttpServer = LSSHttpServer;
 
     /** 自身的日志记录器 */
-    private Logger = BootstrapWrapper.BaseLogger.getSubLogger({
+    private readonly Logger = BootstrapWrapper.BaseLogger.getSubLogger({
         name: "Fronter",
     });
 
@@ -46,11 +46,11 @@ class Fronter {
             this.Logger.debug("start validating task file");
             const validated = TaskSchema.parse(rawConfig); // 校验任务
             this.Logger.debug("file validated");
-            RunnerWrapper.init(new task(validated));
+            RunnerWrapper.init(new task(validated), filePath);
         } else if (rawConfig.type === "queue") {
             this.Logger.debug("start validating queue file");
             const validated = QueueSchema.parse(rawConfig); // 校验队列
-            RunnerWrapper.init(new queue(validated));
+            RunnerWrapper.init(new queue(validated), filePath);
             this.Logger.debug("file validated");
         }
     }

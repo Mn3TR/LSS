@@ -11,7 +11,7 @@ function init(cwd: string) {
     const FileLogger = new Logger({
         minLevel: 0,
     });
-    const BaseLogger = new Logger({
+    const BaseLogger = FileLogger.getSubLogger({
         name: "Base",
         type: "pretty",
         minLevel: 3,
@@ -20,7 +20,7 @@ function init(cwd: string) {
     const stream = rfs.createStream("access.log", {
         interval: "1d", // 每天循环
         size: "10M", // 或者文件达到 10MB 循环
-        path: path.join(cwd, "logs"),
+        path: path.resolve(cwd, "logs"),
     });
 
     FileLogger.attachTransport((logObj: ILogObj) => {

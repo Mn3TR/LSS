@@ -4,6 +4,8 @@ import { TaskSchema, task } from "./task.type";
 // 定义队列 Schema
 export const QueueSchema = z.object({
     type: z.literal("queue"),
+    name: z.string(),
+    isNeedPlugin: z.boolean(),
     tasks: z.array(TaskSchema), // 嵌套校验每一个任务
 });
 
@@ -12,8 +14,7 @@ export type IQueue = z.infer<typeof QueueSchema>;
 export class queue {
     public readonly tasks: task[];
 
-    constructor(data: IQueue) {
-        // 将校验后的原始数据数组转换为 task 类实例数组
-        this.tasks = data.tasks.map((t) => new task(t));
+    constructor(public readonly config: IQueue) {
+        this.tasks = config.tasks.map((t) => new task(t));
     }
 }

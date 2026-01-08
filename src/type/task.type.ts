@@ -28,6 +28,7 @@ export const TaskSchema = z.object({
     taskParamConfig: TaskParamConfigSchema.optional(),
     isNeedLog: z.boolean(),
     taskLogConfig: TaskLogConfigSchema.optional(),
+    isNeedPlugin: z.boolean(),
     timeout: z.number().optional().default(0), // 单位：秒，0 表示不限时
     trackChildProcess: z.boolean().optional().default(false),
 });

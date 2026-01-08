@@ -13,22 +13,22 @@ import loggerInit from "../Util/Logger.util";
  */
 class BootstrapWrapper {
     /** 应用程序环境信息，包含运行模式及绝对路径基础 */
-    public env: appEnv = { isPkg: false, selfPath: "" };
+    public readonly env: appEnv = { isPkg: false, selfPath: "" };
 
     /** 全局配置对象，从 config.json 加载 */
-    public config: object = {};
+    public readonly config: object = {};
 
     /** 命令行参数的总个数 */
-    public argc: number = process.argv.length;
+    public readonly argc: number = process.argv.length;
 
     /** 原始命令行参数数组 */
-    public argv: string[] = process.argv;
+    public readonly argv: string[] = process.argv;
 
     /** 日志记录器基类 */
-    public BaseLogger: Logger<unknown>;
+    public readonly BaseLogger: Logger<unknown>;
 
     /** 自身的日志记录器 */
-    private Logger: Logger<unknown>;
+    private readonly Logger: Logger<unknown>;
 
     /**
      * 初始化执行环境。
@@ -70,8 +70,17 @@ class BootstrapWrapper {
         const configPath = path.join(this.env.selfPath, "config.json");
         if (!fs.existsSync(configPath)) {
             this.Logger.warn("couldn't find config.json, use default config");
-            //todo 应当用更优雅的方式解决config不存在时的问题
             //配置文件不存在,使用默认配置后退出
+            this.config = JSON.parse(
+                fs
+                    .readFileSync(
+                        path.join(
+                            this.env.selfPath,
+                            "./asset/defaultConfig.json",
+                        ),
+                    )
+                    .toString(),
+            );
             return;
         }
 
@@ -81,7 +90,17 @@ class BootstrapWrapper {
             this.Logger.error(
                 "failed to parse config.json, use default config",
             );
-            //无法读取配置文件或读取时发生错误,使用默认配置后退出
+            this.config = JSON.parse(
+                fs
+                    .readFileSync(
+                        path.join(
+                            this.env.selfPath,
+                            "./asset/defaultConfig.json",
+                        ),
+                    )
+                    .toString(),
+            );
+            return;
         }
     }
 }

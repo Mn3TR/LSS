@@ -1,0 +1,4 @@
+{
+    "taskPluginPath": "{taskConfigFile}/plugins",
+    "queuePluginPath": "{queueConfigFile}/plugins"
+}

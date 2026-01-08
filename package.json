@@ -4,7 +4,7 @@
   "description": "旨在解析以json文件描述的任务流程,并通过更改应用配置文件实现自动化的命令行工具",
   "license": "MIT",
   "author": "",
-  "type": "commonjs",
+  "type": "module",
   "main": "src/Fronter/Fronter.ts",
   "bin": "dist/bundle.js",
   "scripts": {

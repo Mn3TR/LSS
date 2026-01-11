@@ -30,12 +30,12 @@ class TaskParamHelper {
         this.Logger.debug("TaskParamHelper init");
         this.Logger.debug("get task configfile path");
         this.configFilePath = path.resolve(
-            BootstrapWrapper.env.selfPath,
+            BootstrapWrapper.env.cwd,
             config.configFilePath,
         );
         this.Logger.debug("get task paramfile path");
         this.paramFilePath = path.resolve(
-            BootstrapWrapper.env.selfPath,
+            BootstrapWrapper.env.cwd,
             config.paramFilePath,
         );
         this.Logger.debug("gen backup file identifier");

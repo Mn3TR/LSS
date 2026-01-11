@@ -37,7 +37,7 @@ class Fronter {
         try {
             rawConfig = JSON.parse(fs.readFileSync(filePath, "utf8"));
             this.Logger.debug("parsed task/queue file");
-        } catch (error) {
+        } catch (_error) {
             this.Logger.fatal("couldn't parse or read task/queue file");
             process.exit(1);
         }
@@ -46,11 +46,11 @@ class Fronter {
             this.Logger.debug("start validating task file");
             const validated = TaskSchema.parse(rawConfig); // 校验任务
             this.Logger.debug("file validated");
-            RunnerWrapper.init(new task(validated), filePath);
+            RunnerWrapper.init(new task(validated));
         } else if (rawConfig.type === "queue") {
             this.Logger.debug("start validating queue file");
             const validated = QueueSchema.parse(rawConfig); // 校验队列
-            RunnerWrapper.init(new queue(validated), filePath);
+            RunnerWrapper.init(new queue(validated));
             this.Logger.debug("file validated");
         }
     }
@@ -71,7 +71,7 @@ class Fronter {
         const [, , cmd, file] = BootstrapWrapper.argv;
 
         if (BootstrapWrapper.argc === 4 && cmd === "run" && file) {
-            return path.resolve(BootstrapWrapper.env.selfPath, file);
+            return path.resolve(BootstrapWrapper.env.appDir, file);
         }
 
         this.Logger.fatal(`Unknown arg:${cmd}`);

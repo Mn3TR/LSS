@@ -1,7 +1,6 @@
-import path, { join } from "path";
+import * as path from "node:path";
 import * as rfs from "rotating-file-stream";
 import { type ILogObj, Logger } from "tslog";
-import BootstrapWrapper from "../BootstrapWrapper/BootstrapWrapper";
 
 /**
  * 日志相关事务初始化
@@ -24,7 +23,7 @@ function init(cwd: string) {
     });
 
     FileLogger.attachTransport((logObj: ILogObj) => {
-        stream.write(JSON.stringify(logObj) + "\n");
+        stream.write(`${JSON.stringify(logObj)}\n`);
     });
 
     //将日志基类暴露

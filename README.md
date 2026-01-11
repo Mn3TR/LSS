@@ -145,4 +145,10 @@ Queue 配置文件示例 (`queue.json`)
 * **Utilities**: [Lodash](https://lodash.com/)
 * **Tooling**: [Biome](https://biomejs.dev/), [esbuild](https://esbuild.github.io/), [pkg](https://github.com/vercel/pkg)
 
+## TODO
+- [] 默认日志处理器编写,错误重试逻辑
+- [] 完善的子进程追踪
+- [] 插件系统
+- [] 发布正式版
+
 本项目采用 [MIT License](https://www.google.com/search?q=LICENSE)。

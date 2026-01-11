@@ -5,7 +5,6 @@ import { TaskSchema, task } from "./task.type";
 export const QueueSchema = z.object({
     type: z.literal("queue"),
     name: z.string(),
-    isNeedPlugin: z.boolean(),
     tasks: z.array(TaskSchema), // 嵌套校验每一个任务
 });
 

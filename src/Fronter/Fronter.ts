@@ -71,7 +71,7 @@ class Fronter {
         const [, , cmd, file] = BootstrapWrapper.argv;
 
         if (BootstrapWrapper.argc === 4 && cmd === "run" && file) {
-            return path.resolve(BootstrapWrapper.env.appDir, file);
+            return path.resolve(BootstrapWrapper.env.cwd, file);
         }
 
         this.Logger.fatal(`Unknown arg:${cmd}`);

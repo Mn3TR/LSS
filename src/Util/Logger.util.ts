@@ -8,6 +8,7 @@ import { type ILogObj, Logger } from "tslog";
  */
 function init(cwd: string) {
     const FileLogger = new Logger({
+        type: "json",
         minLevel: 0,
     });
     const BaseLogger = FileLogger.getSubLogger({
@@ -23,7 +24,10 @@ function init(cwd: string) {
     });
 
     FileLogger.attachTransport((logObj: ILogObj) => {
-        stream.write(`${JSON.stringify(logObj)}\n`);
+        // 使用 setImmediate 确保不阻塞主线程
+        setImmediate(() => {
+            stream.write(`${JSON.stringify(logObj)}\n`);
+        });
     });
 
     //将日志基类暴露

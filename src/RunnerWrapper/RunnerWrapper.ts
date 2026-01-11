@@ -23,7 +23,6 @@ class RunnerWrapper {
                 this.Logger.debug("new a task in queue");
 
                 await this.newTask(t);
-
             }
         }
     }

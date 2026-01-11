@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Logger } from "tslog";
+import defaultConfig from "../assets/defaultConfig.json";
 import type { appEnv } from "../type/appenv.type";
 import loggerInit from "../Util/Logger.util";
 
@@ -13,7 +14,7 @@ import loggerInit from "../Util/Logger.util";
  */
 class BootstrapWrapper {
     /** 应用程序环境信息，包含运行模式及绝对路径基础 */
-    public readonly env: appEnv
+    public readonly env: appEnv;
 
     /** 全局配置对象，从 config.json 加载 */
     public readonly config: object = {};
@@ -40,11 +41,12 @@ class BootstrapWrapper {
     constructor() {
         //检查运行环境,并获取工作路径
         this.env = {
-            isPkg:typeof process.pkg !== "undefined",
-            appDir: typeof process.pkg !== "undefined"
-            ? path.dirname(process.execPath) 
-            : process.cwd(),
-            cwd: process.cwd()
+            isPkg: typeof process.pkg !== "undefined",
+            appDir:
+                typeof process.pkg !== "undefined"
+                    ? path.dirname(process.execPath)
+                    : process.cwd(),
+            cwd: process.cwd(),
         };
         //初始化日志记录器
         this.BaseLogger = loggerInit(this.env.appDir);
@@ -74,16 +76,7 @@ class BootstrapWrapper {
         if (!fs.existsSync(configPath)) {
             this.Logger.warn("couldn't find config.json, use default config");
             //配置文件不存在,使用默认配置后退出
-            this.config = JSON.parse(
-                fs
-                    .readFileSync(
-                        path.join(
-                            this.env.appDir,
-                            "./asset/defaultConfig.json",
-                        ),
-                    )
-                    .toString(),
-            );
+            this.config = defaultConfig;
             return;
         }
 
@@ -93,16 +86,7 @@ class BootstrapWrapper {
             this.Logger.error(
                 "failed to parse config.json, use default config",
             );
-            this.config = JSON.parse(
-                fs
-                    .readFileSync(
-                        path.join(
-                            this.env.appDir,
-                            "./asset/defaultConfig.json",
-                        ),
-                    )
-                    .toString(),
-            );
+            this.config = defaultConfig;
             return;
         }
     }

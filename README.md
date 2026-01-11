@@ -4,17 +4,18 @@ LSS 是一个通过解析以json文件描述的任务流程(task/queue.json),并
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 核心特性
+## 特性
 
 - **双模式调度**：支持单个任务 (`task`) 执行或多个任务组成的队列 (`queue`) 顺序执行。
-- **动态参数注入**：在任务启动前自动将参数文件合并至目标配置文件，并在执行结束后自动从备份中恢复原始配置，确保配置文件的纯净性。
-- **实时日志监听**：内置日志处理器，支持通过文件名匹配、关键字搜索或获取最新文件来实时追踪子进程输出。
-- **安全保障机制**：提供任务超时强制终止逻辑，并能自动清理子进程以防止孤儿进程产生。
+- **参数注入**：在任务启动前自动将参数文件合并至目标配置文件，并在执行结束后自动从备份中恢复原始配置，确保配置文件的纯净性。
+- **日志监听**：内置日志处理器，支持通过文件名匹配、关键字搜索或获取最新文件来实时追踪子进程输出。
+- **保障机制**：提供任务超时强制终止逻辑
 
 ## 目录结构
 
 ```plaintext
 src/
+├── assets/              # 应用资源,包括默认配置文件
 ├── BootstrapWrapper/    # 环境检测、临时目录准备及全局配置加载
 ├── Fronter/             # 命令行入口，负责解析参数与模式分发
 ├── Runner/              # 核心执行器与日志轮询处理器
@@ -70,6 +71,7 @@ npm run watch-build
 ```json
 {
   "type": "task",
+  "name": "testtask",
   "executableFilePath": "node script.js",
   "isNeedParam": true,
   "taskParamConfig": {
@@ -92,6 +94,7 @@ Queue 配置文件示例 (`queue.json`)
 ```json
 {
   "type": "queue",
+  "name": "testqueue",
   "tasks": [
     {
       "type": "task",

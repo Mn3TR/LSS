@@ -14,7 +14,7 @@ function init(cwd: string) {
     const BaseLogger = FileLogger.getSubLogger({
         name: "Base",
         type: "pretty",
-        minLevel: 3,
+        minLevel: 0,
     });
 
     const stream = rfs.createStream("access.log", {

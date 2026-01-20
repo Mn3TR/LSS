@@ -1,0 +1,18 @@
+{
+  "output": {
+    "filePath": "project-for-ai.txt",
+    "style": "markdown" 
+  },
+  "ignore": {
+    "customPatterns": [
+      "dist/**",
+      "bin/**",
+      "temp/**",
+      "node_modules/**",
+      "*.log",
+      "config.json",
+      "LIECNSE",
+      "README.md"
+    ]
+  }
+}

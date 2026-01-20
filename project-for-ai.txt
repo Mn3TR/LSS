@@ -1,0 +1,1677 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+# File Summary
+
+## Purpose
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+## File Format
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  a. A header with the file path (## File: path/to/file)
+  b. The full contents of the file in a code block
+
+## Usage Guidelines
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+## Notes
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: dist/**, bin/**, temp/**, node_modules/**, *.log, config.json, LIECNSE, README.md
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+
+# Directory Structure
+```
+.gitignore
+biome.json
+LICENSE
+package.json
+repomix.config.json
+src-old/assets/defaultConfig.json
+src-old/BootstrapWrapper/BootstrapWrapper.ts
+src-old/Fronter/Fronter.ts
+src-old/Runner/Runner.ts
+src-old/Runner/RunnerLogHandler.ts
+src-old/RunnerWrapper/RunnerWrapper.ts
+src-old/RunnerWrapper/TaskParamHelper.ts
+src-old/type/appenv.type.ts
+src-old/type/env.d.ts
+src-old/type/queue.type.ts
+src-old/type/task.type.ts
+src-old/Util/Logger.util.ts
+src/Backend/assets/defaultConfig.json
+src/Backend/core/BootstrapWrapper.ts
+src/Backend/core/TaskPool.ts
+src/Backend/core/TaskPoolManager.ts
+src/Backend/type/appenv.type.ts
+src/Backend/type/config.type.ts
+src/Backend/type/env.d.ts
+src/Backend/type/queue.type.ts
+src/Backend/type/task.type.ts
+src/Backend/Util/Logger.util.ts
+src/Fronter/Fronter.ts
+src/Fronter/Util/Logger.util.ts
+tsconfig.json
+```
+
+# Files
+
+## File: repomix.config.json
+```json
+{
+  "output": {
+    "filePath": "project-for-ai.txt",
+    "style": "markdown" 
+  },
+  "ignore": {
+    "customPatterns": [
+      "dist/**",
+      "bin/**",
+      "temp/**",
+      "node_modules/**",
+      "*.log",
+      "config.json",
+      "LIECNSE",
+      "README.md"
+    ]
+  }
+}
+```
+
+## File: src-old/assets/defaultConfig.json
+```json
+{
+    "taskPluginPath": "{taskConfigFile}/plugins",
+    "queuePluginPath": "{queueConfigFile}/plugins"
+}
+```
+
+## File: src-old/BootstrapWrapper/BootstrapWrapper.ts
+```typescript
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { Logger } from "tslog";
+import defaultConfig from "../assets/defaultConfig.json";
+import type { appEnv } from "../type/appenv.type";
+import loggerInit from "../Util/Logger.util";
+
+/**
+ * 引导程序包装器，负责预处理执行环境、配置加载及基础目录准备。
+ * 1. 识别并适配可执行文件（pkg）与源代码运行环境。
+ * 2. 统一管理命令行参数。
+ * 3. 确保必要的缓存目录（./temp）存在。
+ * 4. 同步加载全局 `config.json` 配置文件。
+ */
+class BootstrapWrapper {
+    /** 应用程序环境信息，包含运行模式及绝对路径基础 */
+    public readonly env: appEnv;
+
+    /** 全局配置对象，从 config.json 加载 */
+    public readonly config: object = {};
+
+    /** 命令行参数的总个数 */
+    public readonly argc: number = process.argv.length;
+
+    /** 原始命令行参数数组 */
+    public readonly argv: string[] = process.argv;
+
+    /** 日志记录器基类 */
+    public readonly BaseLogger: Logger<unknown>;
+
+    /** 自身的日志记录器 */
+    private readonly Logger: Logger<unknown>;
+
+    /**
+     * 初始化执行环境。
+     * 1. 环境检测：通过process.pkg判断是否处于打包后的二进制环境中。
+     * 2. 路径修正：如果是 pkg 环境，使用execPath获取路径，否则使用cwd。
+     * 3. 目录准备：检查并按需创建./temp临时文件夹。
+     * 4. 配置加载：校验并读取config.json
+     */
+    constructor() {
+        //检查运行环境,并获取工作路径
+        this.env = {
+            isPkg: typeof process.pkg !== "undefined",
+            appDir:
+                typeof process.pkg !== "undefined"
+                    ? path.dirname(process.execPath)
+                    : process.cwd(),
+            cwd: process.cwd(),
+        };
+        //初始化日志记录器
+        this.BaseLogger = loggerInit(this.env.appDir);
+        this.Logger = this.BaseLogger.getSubLogger({
+            name: "BootstrapWrapper",
+        });
+        this.Logger.debug("BootstrapWrapper init");
+        this.Logger.debug("BaseLogger init");
+
+        this.Logger.debug(`check environment, get cwd:${this.env.appDir}`);
+
+        //确保缓存目录存在
+        const tempDir = path.join(this.env.appDir, "temp");
+        if (!fs.existsSync(tempDir)) {
+            this.Logger.debug("didn't find temp dictionary, create it");
+            try {
+                fs.mkdirSync(tempDir);
+            } catch (error) {
+                this.Logger.fatal("cloudn't create temp dictionary");
+                this.Logger.fatal(error);
+                process.exit(1);
+            }
+        }
+
+        //配置加载,配置不存在则使用默认配置
+        const configPath = path.join(this.env.appDir, "config.json");
+        if (!fs.existsSync(configPath)) {
+            this.Logger.warn("couldn't find config.json, use default config");
+            //配置文件不存在,使用默认配置后退出
+            this.config = defaultConfig;
+            return;
+        }
+
+        try {
+            this.config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+        } catch (_e) {
+            this.Logger.error(
+                "failed to parse config.json, use default config",
+            );
+            this.config = defaultConfig;
+            return;
+        }
+    }
+}
+
+export default new BootstrapWrapper();
+```
+
+## File: src-old/Fronter/Fronter.ts
+```typescript
+import * as fs from "node:fs";
+import * as path from "node:path";
+import BootstrapWrapper from "../BootstrapWrapper/BootstrapWrapper";
+import RunnerWrapper from "../RunnerWrapper/RunnerWrapper";
+import { QueueSchema, queue } from "../type/queue.type";
+import { TaskSchema, task } from "../type/task.type";
+
+//TODO
+class LSSHttpServer {}
+
+/**
+ * 调度中心类，负责初始化执行环境并分发任务。
+ */
+class Fronter {
+    /** 绑定的 HTTP 服务类 */
+    static LSSHttpServer = LSSHttpServer;
+
+    /** 自身的日志记录器 */
+    private readonly Logger = BootstrapWrapper.BaseLogger.getSubLogger({
+        name: "Fronter",
+    });
+
+    /**
+     * 应用程序入口方法。
+     * 2. 解析命令行参数获取操作模式及文件路径。
+     * 3. 校验配置文件存在性。
+     * 4. 读取并解析 JSON 配置，根据 `type` 字段初始化对应的运行器 (RunnerWrapper)。
+     * @returns {void}
+     */
+    main(): void {
+        this.Logger.debug("main function");
+        this.Logger.debug("start parsing argv");
+        const filePath = this.parse();
+        this.Logger.debug(`found task/queue file path:${filePath}`);
+
+        let rawConfig: any;
+        try {
+            rawConfig = JSON.parse(fs.readFileSync(filePath, "utf8"));
+            this.Logger.debug("parsed task/queue file");
+        } catch (_error) {
+            this.Logger.fatal("couldn't parse or read task/queue file");
+            process.exit(1);
+        }
+
+        if (rawConfig.type === "task") {
+            this.Logger.debug("start validating task file");
+            const validated = TaskSchema.parse(rawConfig); // 校验任务
+            this.Logger.debug("file validated");
+            RunnerWrapper.init(new task(validated));
+        } else if (rawConfig.type === "queue") {
+            this.Logger.debug("start validating queue file");
+            const validated = QueueSchema.parse(rawConfig); // 校验队列
+            RunnerWrapper.init(new queue(validated));
+            this.Logger.debug("file validated");
+        }
+    }
+
+    /**
+     * 解析命令行参数并确定任务执行模式。
+     * 该函数根据BootstrapWrapper提供的参数识别指令类型(单任务或队列),并将相对路径解析为绝对路径.
+     * @example
+     * // 命令行输入: lss.exe rt "./task.json"
+     * // 返回: { type: "task", filePath: "C:/absolute/path/task.json" }
+     * @returns {Object} 返回包含模式类型和解析后文件路径的对象
+     * @returns {"task" | "queue"} type - 执行模式：'rt' (task) 或 'rq' (queue)
+     * @returns {string} filePath - 任务配置文件的绝对路径
+     * @throws {Error} 如果参数无法识别，将打印错误日志并调用 `process.exit(0)` 终止进程
+     */
+    private parse(): string {
+        this.Logger.debug("parse fucntion");
+        const [, , cmd, file] = BootstrapWrapper.argv;
+
+        if (BootstrapWrapper.argc === 4 && cmd === "run" && file) {
+            return path.resolve(BootstrapWrapper.env.cwd, file);
+        }
+
+        this.Logger.fatal(`Unknown arg:${cmd}`);
+        process.exit(1);
+    }
+}
+
+new Fronter().main();
+```
+
+## File: src-old/Runner/Runner.ts
+```typescript
+import { type ChildProcess, spawn } from "node:child_process";
+import type { Logger } from "tslog";
+import BootstrapWrapper from "../BootstrapWrapper/BootstrapWrapper";
+import type { task } from "../type/task.type";
+import type _LogHandler from "./RunnerLogHandler";
+
+class Runner {
+    /** 实例的日志处理器 */
+    private LogHandler: _LogHandler | undefined;
+    /** 子进程对象 */
+    private child: ChildProcess | null = null;
+    /** 超时计时器 */
+    private timeoutTimer: NodeJS.Timeout | null = null;
+    /** 自身的日志记录器*/
+    private Logger: Logger<unknown> = BootstrapWrapper.BaseLogger.getSubLogger({
+        name: "Runner",
+    });
+
+    constructor(private t: task) {
+        //监听主进程信号，防止主程序退出后子进程变成“孤儿”
+        this.setupSignalHandlers();
+    }
+
+    private setupSignalHandlers() {
+        this.Logger.debug("setup signalHandlers");
+        const killChild = () => {
+            this.Logger.debug(
+                "received exit signal, start killing child process",
+            );
+            if (this.child && !this.child.killed) {
+                this.Logger.info(`正在清理子进程 PID: ${this.child.pid}`);
+                this.child.kill("SIGTERM"); // 优雅退出
+            }
+        };
+
+        // 监听常见的退出信号
+        process.on("SIGINT", killChild); // Ctrl+C
+        process.on("SIGTERM", killChild); // 终止信号
+        process.on("exit", killChild); // 主进程正常或异常结束
+    }
+
+    async run(): Promise<number | null> {
+        const useStdout = this.t.config.taskLogConfig?.logSource === "stdout";
+        this.Logger.debug(`task log source:${useStdout}`);
+
+        return new Promise((resolve) => {
+            // 启动子进程
+            this.Logger.debug("start child process");
+            this.child = spawn(this.t.config.executableFilePath, {
+                shell: true,
+                detached: false, // 确保子进程不脱离会话
+                stdio: useStdout ? ["inherit", "pipe", "pipe"] : "inherit",
+            });
+
+            //启动日志
+            if (this.LogHandler) {
+                this.Logger.debug("create logHandler");
+
+                if (useStdout && this.child.stdout) {
+                    this.Logger.debug(
+                        "task log use stdout, start logHandler by stdout",
+                    );
+                    this.LogHandler.start(
+                        this.LogHandler.defaultHandler,
+                        this.child.stdout,
+                    );
+                } else {
+                    this.Logger.debug(
+                        "task log use file, start logHandler by file",
+                    );
+                    this.LogHandler.start(this.LogHandler.defaultHandler);
+                }
+            }
+
+            const pid = this.child.pid;
+            this.Logger.info(
+                `任务启动 [PID: ${pid}] [路径: ${this.t.config.executableFilePath}]`,
+            );
+
+            // 超时控制逻辑
+            if (this.t.config.timeout && this.t.config.timeout > 0) {
+                this.Logger.debug(
+                    `任务开启了超时控制,其将会在运行${this.t.config.timeout}s后被强制终止`,
+                );
+                this.timeoutTimer = setTimeout(() => {
+                    if (this.child && !this.child.killed) {
+                        this.Logger.error(
+                            `任务${this.t.config.name}运行超时 (${this.t.config.timeout}s)，强制终止, PID: ${pid}`,
+                        );
+                        this.child.kill("SIGKILL"); // 超时强制杀掉
+                    }
+                }, this.t.config.timeout * 1000);
+            }
+
+            this.child.on("close", (code) => {
+                this.cleanup();
+                this.Logger.info(`进程退出，退出码: ${code}`);
+                resolve(code);
+            });
+
+            this.child.on("error", (err) => {
+                this.cleanup();
+                this.Logger.error(`进程错误: ${err.message}`);
+                resolve(null);
+            });
+        });
+    }
+
+    /**
+     * 清理资源：停止日志监听、清除超时计时器
+     */
+    private cleanup() {
+        this.Logger.debug("Runner cleanup");
+        this.Logger.debug("stop LogHandler");
+        if (this.LogHandler) this.LogHandler.stop();
+        if (this.timeoutTimer) {
+            this.Logger.debug("clear timeoutTimer");
+            clearTimeout(this.timeoutTimer);
+            this.timeoutTimer = null;
+        }
+    }
+}
+
+export default Runner;
+```
+
+## File: src-old/Runner/RunnerLogHandler.ts
+```typescript
+import * as fs from "node:fs";
+import path from "node:path";
+import type { Readable } from "node:stream";
+import watch, { type Watcher } from "node-watch";
+import type { Logger } from "tslog";
+import BootstrapWrapper from "../BootstrapWrapper/BootstrapWrapper";
+import type { ITaskLogConfig } from "../type/task.type";
+
+/**
+ * 任务日志处理器，负责定位日志文件并实时追踪新增内容。
+ */
+class TaskLogHandler {
+    /** 日志来源 */
+    private logSource: "file" | "stdout";
+    /** 日志路径, 使用stdout时为undefined */
+    private logFilePath: string | undefined;
+    /** 上次读取文件的位置 */
+    private lastSize = 0;
+    /** 存储上次轮询读取到的、不完整的行末尾数据 */
+    private tailBuffer: Buffer = Buffer.alloc(0);
+    /** 防止异步重入锁 */
+    private isProcessing = false;
+    /** watcher实例 */
+    private watcher?: Watcher;
+    /** 自身的日志记录器*/
+    private Logger: Logger<unknown> = BootstrapWrapper.BaseLogger.getSubLogger({
+        name: "Runner",
+    });
+
+    constructor(config: ITaskLogConfig) {
+        this.Logger.debug("LogHandler created");
+        this.logSource = config.logSource;
+        this.Logger.debug(`task logSource:${this.logSource}`);
+        if (this.logSource === "file") {
+            this.Logger.debug("task use file log, start finding");
+            let foundPath: string | null = null;
+
+            switch (config.logFileSearchMethod) {
+                case "field":
+                    foundPath = this.findFile(
+                        config.logFileFolderPath,
+                        "field",
+                        config.logFilenameField,
+                    );
+                    break;
+                case "filename":
+                    foundPath = this.findFile(
+                        config.logFileFolderPath,
+                        "filename",
+                        config.logFileName,
+                    );
+                    break;
+                case "latest":
+                    foundPath = this.findFile(
+                        config.logFileFolderPath,
+                        "latest",
+                    );
+                    break;
+            }
+
+            if (foundPath !== null) {
+                this.logFilePath = foundPath;
+                this.Logger.debug(`find log file in:${this.logFilePath}`);
+            } else {
+                this.Logger.fatal(
+                    `无法通过方法 "${config.logFileSearchMethod}" 找到文件`,
+                );
+                throw new Error(
+                    `无法通过方法 "${config.logFileSearchMethod}" 找到文件`,
+                );
+            }
+        }
+    }
+
+    /**
+     * 启动日志监听流程。
+     */
+    public async start(
+        callback: (line: string) => void,
+        stream?: Readable,
+    ): Promise<void> {
+        this.Logger.debug("start listening log");
+        if (this.logSource === "file" && this.logFilePath) {
+            try {
+                this.Logger.debug("init lastSize, skip history");
+                // 初始化偏移量，跳过历史数据
+                this.lastSize = fs.statSync(this.logFilePath).size;
+            } catch {
+                this.lastSize = 0;
+            }
+            //启动监听
+            this.Logger.debug(`start listening log in:${this.logFilePath}`);
+            this.watcher = watch(this.logFilePath, (evt, _name) => {
+                if (evt === "update") {
+                    this.Logger.debug("log file updated");
+                    this.pollFile(callback);
+                }
+            });
+        }
+
+        if (this.logSource === "stdout" && stream) {
+            this.Logger.debug("start listening log by stream");
+            stream.on("data", (chunk: Buffer) => {
+                this.Logger.debug("log stream updated");
+                this.processNewBuffer(callback, chunk);
+            });
+        }
+    }
+
+    /**
+     * 文件改动
+     */
+    private async pollFile(callback: (line: string) => void) {
+        if (this.isProcessing) return;
+        this.isProcessing = true;
+
+        if (this.logFilePath) {
+            try {
+                this.Logger.debug("get log file currentSize");
+                const { size: currentSize } = fs.statSync(this.logFilePath);
+
+                // 处理日志翻转（如文件被清空或重建）
+                if (currentSize < this.lastSize) {
+                    this.lastSize = 0;
+                    this.tailBuffer = Buffer.alloc(0);
+                }
+
+                if (currentSize > this.lastSize) {
+                    const readLen = currentSize - this.lastSize;
+                    const buffer = Buffer.alloc(readLen);
+
+                    // 读取增量内容
+                    this.Logger.debug("read new log contects");
+                    const fd = fs.openSync(this.logFilePath, "r");
+                    try {
+                        fs.readSync(fd, buffer, 0, readLen, this.lastSize);
+                        this.processNewBuffer(callback, buffer);
+                    } finally {
+                        fs.closeSync(fd);
+                    }
+                }
+            } catch (error) {
+                this.Logger.error(`读取日志错误:${error}`);
+            } finally {
+                this.isProcessing = false;
+            }
+        }
+    }
+
+    public stop(): void {
+        this.Logger.debug("LogHandler stop");
+        this.watcher?.close();
+    }
+
+    public defaultHandler(line: string) {
+        //console.log(line);
+    }
+
+    /**
+     * 内部文件搜索算法（保持不变）
+     */
+    private findFile(
+        dir: string,
+        mode: "filename" | "latest" | "field",
+        query?: string,
+    ): string | null {
+        try {
+            this.Logger.debug(`use method:${mode} to find log file`);
+            const files = fs.readdirSync(dir);
+            if (!files.length) return null;
+
+            let targetFile: string | undefined;
+            switch (mode) {
+                case "filename":
+                    targetFile = files.find((f) => f === query);
+                    break;
+                case "field":
+                    targetFile = files.find((f) => {
+                        const nameWithoutExt = path.parse(f).name;
+                        return query ? nameWithoutExt.includes(query) : false;
+                    });
+                    break;
+                case "latest":
+                    targetFile = files
+                        .map((f) => ({
+                            name: f,
+                            time:
+                                fs.statSync(path.join(dir, f), {
+                                    throwIfNoEntry: false,
+                                })?.mtimeMs || 0,
+                        }))
+                        .sort((a, b) => b.time - a.time)[0]?.name;
+                    break;
+            }
+            return targetFile ? path.join(dir, targetFile) : null;
+        } catch (error) {
+            console.error("文件搜索失败:", error);
+            return null;
+        }
+    }
+
+    /**
+     * 处理新增buffer内容
+     */
+    private processNewBuffer(callback: (ling: string) => void, buffer: Buffer) {
+        this.Logger.debug("process new buffer");
+        // 将上次遗留的“半行”与本次读取内容合并
+        const combinedBuffer = Buffer.concat([this.tailBuffer, buffer]);
+        let offset = 0;
+
+        // 查找换行符 (0x0A 为 \n)
+        this.Logger.debug("find line breaks");
+        while (true) {
+            const nlIndex = combinedBuffer.indexOf(0x0a, offset);
+
+            if (nlIndex === -1) {
+                // 没找到换行符，剩下的部分存入 tailBuffer 等待下次轮询
+                this.Logger.debug("couldn't find line breaks");
+                this.tailBuffer = combinedBuffer.slice(offset);
+                break;
+            }
+
+            // 提取完整行，并处理 \r\n (Windows 兼容)
+            this.Logger.debug("found line breaks");
+            const line = combinedBuffer
+                .toString("utf8", offset, nlIndex)
+                .replace(/\r$/, "");
+
+            if (line.trim()) {
+                this.Logger.debug("call handler");
+                callback(line);
+            }
+
+            offset = nlIndex + 1;
+        }
+        if (this.logSource === "file" && this.logFilePath) {
+            this.Logger.debug("update lastSize");
+            const { size: currentSize } = fs.statSync(this.logFilePath);
+            this.lastSize = currentSize;
+        }
+    }
+}
+
+export default TaskLogHandler;
+```
+
+## File: src-old/RunnerWrapper/RunnerWrapper.ts
+```typescript
+import type { Logger } from "tslog";
+import BootstrapWrapper from "../BootstrapWrapper/BootstrapWrapper";
+import _Runner from "../Runner/Runner";
+import { queue } from "../type/queue.type";
+import { task } from "../type/task.type";
+import _ParamHelper from "./TaskParamHelper";
+
+class RunnerWrapper {
+    /** 自身的日志记录器*/
+    private Logger: Logger<unknown> = BootstrapWrapper.BaseLogger.getSubLogger({
+        name: "RunnerWrapper",
+    });
+
+    async init(obj: task | queue) {
+        this.Logger.debug("RunnerWrapper init");
+        if (obj instanceof task) {
+            await this.newTask(obj);
+        } else if (obj instanceof queue) {
+            this.Logger.debug("new a queue");
+
+            //循环执行队列中的任务实例
+            for (const t of obj.tasks) {
+                this.Logger.debug("new a task in queue");
+
+                await this.newTask(t);
+            }
+        }
+    }
+
+    private async newTask(t: task) {
+        this.Logger.debug(`new task:${t.config.name}`);
+        //确保 taskParamConfig 在 isNeedParam 为 true 时存在
+        if (t.config.isNeedParam && t.config.taskParamConfig) {
+            this.Logger.debug("created TaskParamHelper");
+            const ParamHelper = new _ParamHelper(t.config.taskParamConfig);
+            this.Logger.debug("backup task configfile");
+            ParamHelper.backup();
+            this.Logger.debug("write task configfile");
+            ParamHelper.write();
+        }
+
+        this.Logger.debug("created Runner");
+        const runner = new _Runner(t);
+        try {
+            this.Logger.debug("Runner start");
+            await runner.run();
+        } catch (error) {
+            this.Logger.fatal("Runner error");
+            this.Logger.fatal(error);
+        } finally {
+            this.Logger.debug("Runner completed");
+            if (t.config.isNeedParam && t.config.taskParamConfig) {
+                const ParamHelper = new _ParamHelper(t.config.taskParamConfig);
+                this.Logger.debug("recovery task configfile");
+                ParamHelper.recovery();
+            }
+        }
+    }
+}
+
+export default new RunnerWrapper();
+```
+
+## File: src-old/RunnerWrapper/TaskParamHelper.ts
+```typescript
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import _ from "lodash";
+import type { Logger } from "tslog";
+import BootstrapWrapper from "../BootstrapWrapper/BootstrapWrapper";
+import type { ITaskParamConfig } from "../type/task.type";
+
+/**
+ * 任务参数辅助类，负责管理配置文件的备份、参数合并与状态恢复。
+ * 该工具通常用于在执行任务前，将动态参数 (Param) 注入到静态配置文件 (Config) 中，
+ * 并在任务结束后通过备份文件恢复原始配置，确保配置文件的纯净性。
+ */
+class TaskParamHelper {
+    /** 目标配置文件的绝对或相对路径 */
+    private configFilePath: string;
+    /** 包含待注入参数的文件路径 */
+    private paramFilePath: string;
+    /** 实例私有的备份文件名 */
+    private backupFileName: string;
+    /** 自身的日志记录器*/
+    private Logger: Logger<unknown> = BootstrapWrapper.BaseLogger.getSubLogger({
+        name: "TaskParamHelper",
+    });
+
+    /**
+     * @param config 包含配置文件和参数文件路径的配置对象
+     */
+    constructor(config: ITaskParamConfig) {
+        this.Logger.debug("TaskParamHelper init");
+        this.Logger.debug("get task configfile path");
+        this.configFilePath = path.resolve(
+            BootstrapWrapper.env.appDir,
+            config.configFilePath,
+        );
+        this.Logger.debug("get task paramfile path");
+        this.paramFilePath = path.resolve(
+            BootstrapWrapper.env.appDir,
+            config.paramFilePath,
+        );
+        this.Logger.debug("gen backup file identifier");
+        // 为每个 helper 实例生成唯一的备份标识
+        const hash = crypto.randomBytes(4).toString("hex");
+
+        this.backupFileName = path.resolve(
+            BootstrapWrapper.env.appDir,
+            `./temp/taskconfig_${Date.now()}_${hash}.bak`,
+        );
+        this.Logger.debug(`backup file name:${this.backupFileName}`);
+    }
+
+    /**
+     * 备份原始配置文件。
+     * 将当前的配置文件复制到临时目录 (`./temp/`)。
+     * @throws {Error} 若文件不存在或目录无写入权限将抛出异常。
+     */
+    backup(): void {
+        this.Logger.debug("backup task config file");
+        try {
+            fs.copyFileSync(this.configFilePath, this.backupFileName);
+        } catch (error) {
+            this.Logger.fatal("couldn't create backup file");
+            this.Logger.fatal(error);
+            process.exit(1);
+        }
+    }
+
+    /**
+     * 写入参数逻辑。
+     * 读取参数文件并利用 `lodash.merge` 将其深度合并到配置文件中。
+     * @returns {void}
+     */
+    write(): void {
+        let config: unknown, param: unknown;
+        try {
+            config = JSON.parse(fs.readFileSync(this.configFilePath, "utf8"));
+        } catch (error) {
+            this.Logger.fatal("couldn't read or parse task config file");
+            this.Logger.fatal(error);
+            process.exit(1);
+        }
+        this.Logger.debug("parsed task config");
+
+        try {
+            param = JSON.parse(fs.readFileSync(this.paramFilePath, "utf8"));
+        } catch (error) {
+            this.Logger.fatal("couldn't read or parse task param file");
+            this.Logger.fatal(error);
+            process.exit(1);
+        }
+        this.Logger.debug("parsed task param");
+
+        // 深度合并参数到配置对象
+        _.merge(config, param);
+        this.Logger.debug("merged config");
+        //no use when tested
+        this.Logger.silly(`merged config:${JSON.stringify(config)}`);
+
+        try {
+            fs.writeFileSync(this.configFilePath, JSON.stringify(config));
+        } catch (error) {
+            this.Logger.fatal(
+                "couldn't write merged config to task configfile",
+            );
+            this.Logger.fatal(error);
+            process.exit(1);
+        }
+        this.Logger.debug("wrote task configfile");
+    }
+
+    /**
+     * 恢复配置文件。
+     * 从临时备份文件中还原配置文件，并覆盖当前已修改的文件。
+     */
+    recovery(): void {
+        try {
+            if (fs.existsSync(this.backupFileName)) {
+                fs.copyFileSync(this.backupFileName, this.configFilePath);
+            }
+        } catch (error) {
+            this.Logger.fatal(
+                `couldn't recovery task configfile, please recovery manually`,
+            );
+            this.Logger.fatal(
+                `the backup is in ${this.backupFileName}, the origin configfile is in:${this.configFilePath}`,
+            );
+            this.Logger.fatal(error);
+        }
+        //fs.unlinkSync(this.backupFileName);
+        this.Logger.debug("task configfile revoeryd, deleted backup file");
+    }
+}
+export default TaskParamHelper;
+```
+
+## File: src-old/type/appenv.type.ts
+```typescript
+interface appEnv {
+    isPkg: boolean;
+    //程序本体所在目录
+    appDir: string;
+    //执行命令所在的目录
+    cwd: string;
+    //task/queue配置文件所在的目录,由各组件自行计算
+}
+
+export type { appEnv };
+```
+
+## File: src-old/type/env.d.ts
+```typescript
+declare namespace NodeJS {
+    interface Process {
+        pkg?: {
+            entrypoint: string;
+            defaultEntrypoint: string;
+            mountpoint: string;
+        };
+    }
+}
+```
+
+## File: src-old/type/queue.type.ts
+```typescript
+import { z } from "zod";
+import { TaskSchema, task } from "./task.type";
+
+// 定义队列 Schema
+export const QueueSchema = z.object({
+    type: z.literal("queue"),
+    name: z.string(),
+    tasks: z.array(TaskSchema), // 嵌套校验每一个任务
+});
+
+export type IQueue = z.infer<typeof QueueSchema>;
+
+export class queue {
+    public readonly tasks: task[];
+
+    constructor(public readonly config: IQueue) {
+        this.tasks = config.tasks.map((t) => new task(t));
+    }
+}
+```
+
+## File: src-old/type/task.type.ts
+```typescript
+import { z } from "zod";
+
+// --- 定义各个部分的 Schema ---
+
+export const TaskParamConfigSchema = z.object({
+    paramFilePath: z.string(),
+    configFilePath: z.string(),
+});
+
+export const TaskLogConfigSchema = z.object({
+    logSource: z.enum(["file", "stdout"]).optional().default("file"),
+    logFileSearchMethod: z.enum(["filename", "latest", "field"]),
+    logFileFolderPath: z.string(),
+    logFileName: z.string().optional(),
+    logFilenameField: z.string().optional(),
+    logTimeSectionStart: z.number(),
+    logTimeSectionEnd: z.number(),
+    logTimeFormat: z.string(),
+    successLog: z.union([z.string(), z.array(z.string())]),
+    failedLog: z.union([z.string(), z.array(z.string())]),
+});
+
+export const TaskSchema = z.object({
+    type: z.literal("task"),
+    name: z.string(),
+    executableFilePath: z.string(),
+    isNeedParam: z.boolean(),
+    taskParamConfig: TaskParamConfigSchema.optional(),
+    isNeedLog: z.boolean(),
+    taskLogConfig: TaskLogConfigSchema.optional(),
+    timeout: z.number().optional().default(0), // 单位：秒，0 表示不限时
+    trackChildProcess: z.boolean().optional().default(false),
+});
+
+// --- 导出类型别名供其他文件使用 ---
+
+export type ITask = z.infer<typeof TaskSchema>;
+// 重点：显式导出子配置类型
+export type ITaskLogConfig = z.infer<typeof TaskLogConfigSchema>;
+export type ITaskParamConfig = z.infer<typeof TaskParamConfigSchema>;
+
+export class task {
+    constructor(public readonly config: ITask) {
+        if (config.isNeedLog && !config.taskLogConfig) {
+            throw new Error("task need log, but didnt give log config");
+        }
+        if (config.isNeedParam && !config.taskParamConfig) {
+            throw new Error("task need param, but didnt give param config");
+        }
+    }
+}
+```
+
+## File: src-old/Util/Logger.util.ts
+```typescript
+import * as path from "node:path";
+import * as rfs from "rotating-file-stream";
+import { type ILogObj, Logger } from "tslog";
+
+/**
+ * 日志相关事务初始化
+ * @returns void
+ */
+function init(cwd: string) {
+    const FileLogger = new Logger({
+        type: "json",
+        minLevel: 0,
+    });
+    const BaseLogger = FileLogger.getSubLogger({
+        name: "Base",
+        type: "pretty",
+        minLevel: 0,
+    });
+
+    const stream = rfs.createStream("access.log", {
+        interval: "1d", // 每天循环
+        size: "10M", // 或者文件达到 10MB 循环
+        path: path.resolve(cwd, "logs"),
+    });
+
+    FileLogger.attachTransport((logObj: ILogObj) => {
+        // 使用 setImmediate 确保不阻塞主线程
+        setImmediate(() => {
+            stream.write(`${JSON.stringify(logObj)}\n`);
+        });
+    });
+
+    //将日志基类暴露
+    return BaseLogger;
+}
+
+export default init;
+```
+
+## File: src/Backend/assets/defaultConfig.json
+```json
+{
+    "loglevel": 0,
+    "max_concurrency": 1
+}
+```
+
+## File: src/Backend/core/BootstrapWrapper.ts
+```typescript
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { Logger } from "tslog";
+import { configSchema, Iconfig } from "../type/config.type";
+import defaultConfig from "../assets/defaultConfig.json";
+import type { appEnv } from "../type/appenv.type";
+import loggerInit from "../Util/Logger.util";
+
+/**
+ * 引导程序包装器，负责预处理执行环境、配置加载及基础目录准备。
+ * 1. 识别并适配可执行文件（pkg）与源代码运行环境。
+ * 2. 统一管理命令行参数。
+ * 3. 确保必要的缓存目录（./temp）存在。
+ * 4. 同步加载全局 `config.json` 配置文件。
+ */
+class BootstrapWrapper {
+    /** 应用程序环境信息，包含运行模式及绝对路径基础 */
+    public readonly env: appEnv;
+
+    /** 全局配置对象，从 config.json 加载 */
+    public readonly config: Iconfig;
+
+    /** 命令行参数的总个数 */
+    public readonly argc: number = process.argv.length;
+
+    /** 原始命令行参数数组 */
+    public readonly argv: string[] = process.argv;
+
+    /** 日志记录器基类 */
+    public readonly BaseLogger: Logger<unknown>;
+
+    /** 自身的日志记录器 */
+    private readonly Logger: Logger<unknown>;
+
+    /**
+     * 初始化执行环境。
+     * 1. 环境检测：通过process.pkg判断是否处于打包后的二进制环境中。
+     * 2. 路径修正：如果是 pkg 环境，使用execPath获取路径，否则使用cwd。
+     * 3. 目录准备：检查并按需创建./temp临时文件夹。
+     * 4. 配置加载：校验并读取config.json
+     */
+    constructor() {
+        //检查运行环境,并获取工作路径
+        this.env = {
+            isPkg: typeof process.pkg !== "undefined",
+            appDir:
+                typeof process.pkg !== "undefined"
+                    ? path.dirname(process.execPath)
+                    : process.cwd(),
+            cwd: process.cwd(),
+        };
+
+        //配置加载,配置不存在则使用默认配置
+        const configPath = path.join(this.env.appDir, "config.json");
+        if (!fs.existsSync(configPath)) {
+            console.warn("couldn't find config.json, use default config");
+            //配置文件不存在,使用默认配置后退出
+            this.config = defaultConfig;
+        }
+
+        try {
+            this.config = configSchema.parse(JSON.parse(fs.readFileSync(configPath, "utf8")))
+        } catch (_e) {
+            console.error(
+                "failed to parse config.json, use default config",
+            );
+            this.config = defaultConfig;
+        }
+
+        //初始化日志记录器
+        this.BaseLogger = loggerInit(this.env.appDir);
+        this.Logger = this.BaseLogger.getSubLogger({
+            name: "BootstrapWrapper",
+            //TODO 暂时用defaultconfig的level
+            minLevel: this.config.loglevel
+        });
+        this.Logger.debug("BaseLogger init");
+
+        this.Logger.debug(`check environment, get cwd:${this.env.appDir}`);
+
+        //确保缓存目录存在
+        const tempDir = path.join(this.env.appDir, "temp");
+        if (!fs.existsSync(tempDir)) {
+            this.Logger.debug("didn't find temp dictionary, create it");
+            try {
+                fs.mkdirSync(tempDir);
+            } catch (error) {
+                this.Logger.fatal("cloudn't create temp dictionary");
+                this.Logger.fatal(error);
+                process.exit(1);
+            }
+        }
+
+        //调用Fronter
+        this.Logger.debug("Bootstrap done, call Fronter.main()")
+
+    }
+}
+
+export default new BootstrapWrapper();
+```
+
+## File: src/Backend/core/TaskPool.ts
+```typescript
+import { TaskSchema, task } from "../type/task.type";
+import BootstrapWrapper from "./BootstrapWrapper";
+
+class TaskPool {
+    /** 自身的日志记录器 */
+    private readonly Logger = BootstrapWrapper.BaseLogger.getSubLogger({
+        name: "TaskPoolManager",
+    });
+    private tasks: task[] = [];
+
+    // 初始化/覆盖数据
+    public setAll(tasks: task[]): void {
+        this.Logger.debug(`init tasks by ${tasks}`)
+        this.tasks = tasks;
+    }
+
+    // 获取全部（通常用于 AfterProcessWrapper 统计）
+    public getAll(): task[] {
+        this.Logger.debug("getAll task")
+        return [...this.tasks]; // 返回副本防止外部直接篡改
+    }
+
+    // 基础查找
+    public find(predicate: (t: task) => boolean): task | undefined {
+        this.Logger.debug(`find task by ${predicate}`)
+        return this.tasks.find(predicate);
+    }
+
+    // 基础过滤
+    public filter(predicate: (t: task) => boolean): task[] {
+        this.Logger.debug(`filter task by ${predicate}`)
+        return this.tasks.filter(predicate);
+    }
+
+    // 基础更新
+    public update(id: string, updates: Partial<task>): void {
+        this.Logger.debug(`update task by ${id}, update contect ${updates}`)
+        const task = this.tasks.find(t => t.id === id);
+        if (task) {
+            Object.assign(task, updates);
+        }
+    }
+}
+
+export default new TaskPool()
+```
+
+## File: src/Backend/core/TaskPoolManager.ts
+```typescript
+import BootstrapWrapper from "./BootstrapWrapper";
+import TaskPool from "./TaskPool";
+import { queue } from "../type/queue.type";
+import { task, taskStatus } from "../type/task.type";
+
+class TaskPoolManager {
+    /** 自身的日志记录器 */
+    private readonly Logger = BootstrapWrapper.BaseLogger.getSubLogger({
+        name: "TaskPoolManager",
+    });
+
+    /** 最大并发数量 */
+    private MAX_CONCURRENCY = BootstrapWrapper.config.max_concurrency
+
+    /** task pool 的引用 */
+    private pool = TaskPool
+
+    public init(validatedData: queue | task) {
+        if (validatedData instanceof task) {
+            TaskPool.setAll(new Array(validatedData))
+        }
+        if (validatedData instanceof queue) {
+            TaskPool.setAll(validatedData.tasks)
+        }
+    }
+
+    public requestTask(type: taskStatus): task | null {
+        // 规则：如果是取新任务(init)，且设定为串行(max=1)，则检查是否有活跃任务
+        if (type === taskStatus.init && this.MAX_CONCURRENCY === 1 && this.hasActiveTasks()) {
+            return null;
+        }
+
+        // 规则：并发限制检查
+        const currentRunning = this.pool.filter(t => t.status === taskStatus.running).length;
+        if (type === taskStatus.init && currentRunning >= this.MAX_CONCURRENCY) {
+            return null;
+        }
+
+        // 查找并立即锁定（改变状态）
+        const task = this.pool.find(t => t.status === type);
+        if (task) {
+            // 如果是取 init 或 retry，则统一推向运行态
+            const nextStatus = (type === taskStatus.init || type === taskStatus.retry) ? taskStatus.running : type;
+            this.pool.update(task.id, { status: nextStatus });
+            return task;
+        }
+        return null;
+    }
+
+    /**
+     * 判断池子中是否正有任务处于“活跃流转”状态
+     */
+    private hasActiveTasks(): boolean {
+        const activeStatuses: taskStatus[] = [taskStatus.running, taskStatus.errorwhenrunning, taskStatus.retry];
+        return this.pool.filter(t => activeStatuses.includes(t.status)).length > 0;
+    }
+}
+
+export default new TaskPoolManager()
+```
+
+## File: src/Backend/type/appenv.type.ts
+```typescript
+interface appEnv {
+    isPkg: boolean;
+    //程序本体所在目录
+    appDir: string;
+    //执行命令所在的目录
+    cwd: string;
+    //task/queue配置文件所在的目录,由各组件自行计算
+}
+
+export type { appEnv };
+```
+
+## File: src/Backend/type/config.type.ts
+```typescript
+import { z } from "zod";
+
+export const configSchema = z.object({
+    loglevel: z.number(),
+    max_concurrency: z.number()
+})
+
+export type Iconfig = z.infer<typeof configSchema>
+```
+
+## File: src/Backend/type/env.d.ts
+```typescript
+declare namespace NodeJS {
+    interface Process {
+        pkg?: {
+            entrypoint: string;
+            defaultEntrypoint: string;
+            mountpoint: string;
+        };
+    }
+}
+```
+
+## File: src/Backend/type/queue.type.ts
+```typescript
+import { z } from "zod";
+import { TaskSchema, task } from "./task.type";
+
+// 定义队列 Schema
+export const QueueSchema = z.object({
+    type: z.literal("queue"),
+    name: z.string(),
+    tasks: z.array(TaskSchema), // 嵌套校验每一个任务
+});
+
+export type IQueue = z.infer<typeof QueueSchema>;
+
+export class queue {
+    public readonly tasks: task[];
+
+    constructor(public readonly config: IQueue) {
+        this.tasks = config.tasks.map((t) => new task(t));
+    }
+}
+```
+
+## File: src/Backend/type/task.type.ts
+```typescript
+import { randomBytes } from 'crypto';
+import { z } from "zod";
+
+// --- 定义各个部分的 Schema ---
+
+export const TaskParamConfigSchema = z.object({
+    paramFilePath: z.string(),
+    configFilePath: z.string(),
+});
+
+export const TaskLogConfigSchema = z.object({
+    logSource: z.enum(["file", "stdout"]).optional().default("file"),
+    logFileSearchMethod: z.enum(["filename", "latest", "field"]),
+    logFileFolderPath: z.string(),
+    logFileName: z.string().optional(),
+    logFilenameField: z.string().optional(),
+    logTimeSectionStart: z.number(),
+    logTimeSectionEnd: z.number(),
+    logTimeFormat: z.string(),
+    successLog: z.union([z.string(), z.array(z.string())]),
+    failedLog: z.union([z.string(), z.array(z.string())]),
+});
+
+export const TaskSchema = z.object({
+    type: z.literal("task"),
+    name: z.string(),
+    executableFilePath: z.string(),
+    isNeedParam: z.boolean(),
+    taskParamConfig: TaskParamConfigSchema.optional(),
+    isNeedLog: z.boolean(),
+    taskLogConfig: TaskLogConfigSchema.optional(),
+    timeout: z.number().optional().default(0), // 单位：秒，0 表示不限时
+    trackChildProcess: z.boolean().optional().default(false),
+});
+
+// --- 导出类型别名供其他文件使用 ---
+
+export type ITask = z.infer<typeof TaskSchema>;
+//显式导出子配置类型
+export type ITaskLogConfig = z.infer<typeof TaskLogConfigSchema>;
+export type ITaskParamConfig = z.infer<typeof TaskParamConfigSchema>;
+
+
+export enum taskStatus {
+    "init",
+    "running",
+    "errorwhenrunning",
+    "retry",
+    "done",
+    "error"
+}
+
+export class task {
+    public locking: boolean = false
+    public readonly id: string = randomBytes(8).toString('hex')
+    public status: taskStatus
+
+    constructor(public readonly config: ITask) {
+        this.status = taskStatus.init
+        if (config.isNeedLog && !config.taskLogConfig) {
+            throw new Error("task need log, but didnt give log config");
+        }
+        if (config.isNeedParam && !config.taskParamConfig) {
+            throw new Error("task need param, but didnt give param config");
+        }
+        if (config.taskLogConfig?.logFileSearchMethod === "field" && !config.taskLogConfig.logFilenameField) {
+            throw new Error("task logFileSearchMethod is field, but didnt give field");
+        }
+        if (config.taskLogConfig?.logFileSearchMethod === "filename" && !config.taskLogConfig.logFileName) {
+            throw new Error("task logFileSearchMethod is filename, but didnt give filename");
+        }
+    }
+}
+```
+
+## File: src/Backend/Util/Logger.util.ts
+```typescript
+import * as path from "node:path";
+import * as rfs from "rotating-file-stream";
+import { type ILogObj, Logger } from "tslog";
+
+/**
+ * 日志相关事务初始化
+ * @returns void
+ */
+function init(cwd: string) {
+    const FileLogger = new Logger({
+        type: "json",
+        minLevel: 0,
+    });
+    const BaseLogger = FileLogger.getSubLogger({
+        name: "Base",
+        type: "pretty",
+        minLevel: 0,
+    });
+
+    const stream = rfs.createStream("access.log", {
+        interval: "1d", // 每天循环
+        size: "10M", // 或者文件达到 10MB 循环
+        path: path.resolve(cwd, "logs"),
+    });
+
+    FileLogger.attachTransport((logObj: ILogObj) => {
+        // 使用 setImmediate 确保不阻塞主线程
+        setImmediate(() => {
+            stream.write(`${JSON.stringify(logObj)}\n`);
+        });
+    });
+
+    //将日志基类暴露
+    return BaseLogger;
+}
+
+export default init;
+```
+
+## File: src/Fronter/Util/Logger.util.ts
+```typescript
+import * as path from "node:path";
+import * as rfs from "rotating-file-stream";
+import { type ILogObj, Logger } from "tslog";
+
+/**
+ * 日志相关事务初始化
+ * @returns void
+ */
+function init(cwd: string) {
+    const FileLogger = new Logger({
+        type: "json",
+        minLevel: 0,
+    });
+    const BaseLogger = FileLogger.getSubLogger({
+        name: "Base",
+        type: "pretty",
+        minLevel: 0,
+    });
+
+    const stream = rfs.createStream("access.log", {
+        interval: "1d", // 每天循环
+        size: "10M", // 或者文件达到 10MB 循环
+        path: path.resolve(cwd, "logs"),
+    });
+
+    FileLogger.attachTransport((logObj: ILogObj) => {
+        // 使用 setImmediate 确保不阻塞主线程
+        setImmediate(() => {
+            stream.write(`${JSON.stringify(logObj)}\n`);
+        });
+    });
+
+    //将日志基类暴露
+    return BaseLogger;
+}
+
+export default init;
+```
+
+## File: .gitignore
+```
+bin
+dist
+node_modules
+temp
+config.json
+package
+```
+
+## File: biome.json
+```json
+{
+    "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "recommended": true,
+            "style": {
+                "useImportType": "error",
+                "noNonNullAssertion": "warn"
+            },
+            "correctness": {
+                "noUnusedVariables": "warn"
+            }
+        }
+    },
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 80
+    },
+    "javascript": {
+        "formatter": {
+            "quoteStyle": "double",
+            "trailingCommas": "all"
+        }
+    }
+}
+```
+
+## File: LICENSE
+```
+MIT License
+
+Copyright (c) 2025 MN3TR
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## File: tsconfig.json
+```json
+{
+    "compilerOptions": {
+        "target": "es2020",
+        "module": "CommonJS",
+        "outDir": "./dist",
+        "rootDir": "src",
+        "lib": [
+            "ES2020"
+        ],
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "sourceMap": false,
+        "removeComments": true,
+        "inlineSourceMap": true
+    },
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "bin"
+    ]
+}
+```
+
+## File: src/Fronter/Fronter.ts
+```typescript
+import * as fs from "node:fs";
+import * as path from "node:path";
+import init from "./Util/Logger.util"
+
+/**
+ * LSS的命令行前端
+ */
+class Fronter {
+    /** Fronter程序所在的目录 */
+    private appDir =
+        typeof process.pkg !== "undefined"
+            ? path.dirname(process.execPath)
+            : process.cwd();
+        
+    /** 自身的日志记录器 */
+    private readonly Logger = init(this.appDir).getSubLogger({
+        name: "Fronter",
+    });
+
+    /**
+     * 应用程序入口方法。
+     * 2. 解析命令行参数获取操作模式及文件路径。
+     * 3. 校验配置文件存在性。
+     * 4. 读取并解析 JSON 配置，传给Backend Server
+     * @returns {void}
+     */
+    main(): void {
+        this.Logger.debug("main function");
+        this.Logger.debug("start parsing argv");
+        const filePath = this.parse();
+        this.Logger.debug(`found task/queue file path:${filePath}`);
+
+        let rawConfig: any;
+        try {
+            rawConfig = JSON.parse(fs.readFileSync(filePath, "utf8"));
+            this.Logger.debug("parsed task/queue file");
+        } catch (_error) {
+            this.Logger.fatal("couldn't parse or read task/queue file");
+            process.exit(1);
+        }
+
+        if (rawConfig.type === "task") {
+            this.Logger.debug("start validating task file");
+            const validated = TaskSchema.parse(rawConfig); // 校验任务
+            this.Logger.debug("file validated");
+            TaskPoolManager.init(new task(validated));
+        } else if (rawConfig.type === "queue") {
+            this.Logger.debug("start validating queue file");
+            const validated = QueueSchema.parse(rawConfig); // 校验队列
+            TaskPoolManager.init(new queue(validated));
+            this.Logger.debug("file validated");
+        }
+    }
+
+    /**
+     * 解析命令行参数并确定任务执行模式。
+     * 该函数根据BootstrapWrapper提供的参数识别指令类型(单任务或队列),并将相对路径解析为绝对路径.
+     * @example
+     * // 命令行输入: lss.exe rt "./task.json"
+     * // 返回: { type: "task", filePath: "C:/absolute/path/task.json" }
+     * @returns {Object} 返回包含模式类型和解析后文件路径的对象
+     * @returns {"task" | "queue"} type - 执行模式：'rt' (task) 或 'rq' (queue)
+     * @returns {string} filePath - 任务配置文件的绝对路径
+     * @throws {Error} 如果参数无法识别，将打印错误日志并调用 `process.exit(0)` 终止进程
+     */
+    private parse(): string {
+        this.Logger.debug("parse fucntion");
+        const [, , cmd, file] = BootstrapWrapper.argv;
+
+        if (BootstrapWrapper.argc === 4 && cmd === "run" && file) {
+            return path.resolve(BootstrapWrapper.env.cwd, file);
+        }
+
+        this.Logger.fatal(`Unknown arg:${cmd}`);
+        process.exit(1);
+    }
+}
+
+export default new Fronter();
+```
+
+## File: package.json
+```json
+{
+  "name": "lss",
+  "version": "0.0.1-alpha",
+  "description": "旨在解析以json文件描述的任务流程,并通过更改应用配置文件实现自动化的命令行工具",
+  "license": "MIT",
+  "author": "",
+  "type": "module",
+  "main": "src/Fronter/Fronter.ts",
+  "bin": "dist/bundle.js",
+  "scripts": {
+    "lint": "npx @biomejs/biome check --write ./src",
+    "check": "tsc --noEmit",
+    "bundle": "esbuild src/Fronter/Fronter.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.js",
+    "build": "npm run lint && npm run check && npm run bundle ",
+    "pkg": "npm run build && pkg .",
+    "watch-build": "nodemon --watch src --ext ts --exec \"npm run build\""
+  },
+  "pkg": {
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "bin"
+  },
+  "dependencies": {
+    "@types/lodash": "^4.17.21",
+    "@types/node": "^25.0.3",
+    "lodash": "^4.17.21",
+    "node-watch": "^0.7.4",
+    "rotating-file-stream": "^3.2.7",
+    "tslog": "^4.10.2",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.10",
+    "esbuild": "^0.27.2",
+    "nodemon": "^3.1.11"
+  }
+}
+```

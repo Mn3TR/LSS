@@ -30,18 +30,22 @@ class TaskParamHelper {
         this.Logger.debug("TaskParamHelper init");
         this.Logger.debug("get task configfile path");
         this.configFilePath = path.resolve(
-            BootstrapWrapper.env.cwd,
+            BootstrapWrapper.env.appDir,
             config.configFilePath,
         );
         this.Logger.debug("get task paramfile path");
         this.paramFilePath = path.resolve(
-            BootstrapWrapper.env.cwd,
+            BootstrapWrapper.env.appDir,
             config.paramFilePath,
         );
         this.Logger.debug("gen backup file identifier");
         // 为每个 helper 实例生成唯一的备份标识
         const hash = crypto.randomBytes(4).toString("hex");
-        this.backupFileName = `./temp/taskconfig_${Date.now()}_${hash}.bak`;
+
+        this.backupFileName = path.resolve(
+            BootstrapWrapper.env.appDir,
+            `./temp/taskconfig_${Date.now()}_${hash}.bak`,
+        );
         this.Logger.debug(`backup file name:${this.backupFileName}`);
     }
 
@@ -122,7 +126,7 @@ class TaskParamHelper {
             );
             this.Logger.fatal(error);
         }
-        fs.unlinkSync(this.backupFileName);
+        //fs.unlinkSync(this.backupFileName);
         this.Logger.debug("task configfile revoeryd, deleted backup file");
     }
 }
